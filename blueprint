@@ -1,0 +1,266 @@
+Month-long blueprint for “Vee AI” — built so you can actually finish it and present it tomorrow.
+
+This is broken into 4 weeks with exact tools + what you need for each part.
+
+### 1. Tech Stack & What You’ll Need
+
+Core:
+- Next.js 15 + Bun — frontend + API routes + admin dashboard
+- Supabase — database, auth, file storage for product images. Free tier is enough
+- Ollama Cloud — free AI API for WhatsApp bot. Get key at http://cloud.ollama.com
+- WhatsApp Business API — use Meta WhatsApp Cloud API free for 1000 conversations/month. No phone number needed
+- Flutterwave — payments for Nigeria. Test mode is free
+- Hugging Face — free image generation API for outfit visuals
+- Google Maps Places API — $200 free credit/month for location capture
+
+Hosting: Vercel for http://Next.js — free. Supabase is hosted already.
+
+### 2. System Blueprint
+[Supplier] → [Next.js Admin Dashboard] → [Supabase DB]
+                                              ↓
+[Customer on WhatsApp] → [Ollama Cloud AI] → [API Routes] → [Supabase]
+                                              ↓
+                                        [Flutterwave Payment]
+                                              ↓  
+                                        [Logistics API / Manual]
+Price markup logic:
+selling_price = supplier_base_price * 1.25
+your_profit = selling_price - supplier_base_price
+### 3. 4-Week Timeline
+
+#### Week 1: Setup + Supplier Portal
+Goal: Supplier can register + add products
+
+- Set up http://Next.js project + Supabase connection
+- Build /supplier/register page with Supabase Auth
+- Build /supplier/products/new form: name, description, image upload, base_price, sizes, quantity
+- Build /admin/products table showing all products with base_price * 1.25 calculation
+
+Deliverable: Admin can see marked-up prices in dashboard
+
+#### Week 2: WhatsApp AI + Product Search
+Goal: AI can answer product questions
+
+- Set up Meta WhatsApp Cloud API → get webhook URL
+- Connect webhook to http://Next.js /api/whatsapp route
+- Integrate Ollama Cloud: send user message → get AI response
+- Build /api/products/search endpoint: AI calls this to get products from Supabase
+- AI prompt: “You are a fashion assistant. Call searchProducts() when user asks for clothes. Always return price in NGN.”
+
+Deliverable: You can message WhatsApp “show me sneakers” and AI replies with 3 products + price
+
+#### Week 3: Smart Features + Order Flow
+Goal: AI can recommend size + take order
+
+- Build user_profiles table: shoe_size, shirt_size, height, address
+- AI collects missing info: “What’s your shoe size?” → saves to Supabase
+- Build /api/orders/create endpoint
+- Integrate Flutterwave payment link generation
+- Build image search: customer uploads photo → use Hugging Face CLIP to find similar products
+
+Deliverable: Full flow from “I want size 42 black shoe” → AI → order created → payment link sent
+
+#### Week 4: Enhancements + Polish
+Goal: Demo-ready presentation
+
+- Outfit generator: AI sends product image + prompt to Hugging Face SDXL → “person wearing this shirt with matching shorts”
+- Google Maps: Customer shares location → AI saves coordinates to order for delivery
+- Local supplier routing: Add supplier_type column. If local, show “Delivery in 2-3 days”. If dropship, show “Delivery in 14-21 days”
+- Admin analytics: Simple chart of total orders + revenue
+
+Deliverable: 5-min demo video + slide deck
+
+### 4. What You Need to Register/Sign Up Today
+| Service | Purpose | Cost | Time to setup |
+| *Supabase* | Database + Auth + Storage | Free | 10min |
+| *Ollama Cloud* | AI for WhatsApp | Free tier | 5min |
+| *Meta Developers* | WhatsApp Business API | Free | 30min — need phone verification |
+| *Flutterwave* | Payments | Free test mode | 15min — use test keys only |
+| *Hugging Face* | Image generation | Free 30k reqs | 5min |
+| *Google Cloud* | Maps API | Free $200 credit | 20min — need card but won’t charge |
+### 5. Database Schema You’ll Build
+suppliers (id, name, email, phone, kyc_status)
+products (id, supplier_id, name, description, base_price, image_url, sizes jsonb, stock)
+users (id, phone, shoe_size, shirt_size, address, lat, lng)
+orders (id, user_id, product_id, selling_price, status, payment_ref, tracking_number)
+### 6. Key AI Prompts for WhatsApp
+
+Product search prompt:
+You are StyleDrop AI, a Nigerian fashion assistant. 
+When user asks for products, call searchProducts(query). 
+When user asks for price, call getPrice(productId). 
+Always show price in NGN and include size recommendation based on user profile.
+Outfit matching prompt:
+User uploaded shirt image. Find 3 matching shorts from products table. 
+Generate image prompt: "Fashionable Nigerian person wearing {shirt} with {shorts}, studio lighting"
+### 7. Possible Enhancements to Put in Your Plan
+
+Put these in “Phase 2” so teacher sees you thought beyond MVP:
+
+1. AI Size Predictor: User uploads height + weight → AI predicts shirt size using ML model
+2. Voice Ordering: Whisper API for Pidgin voice notes
+3. Auto Supplier Stock Sync: Cron job that pings supplier API every 6hrs
+4. Review System: AI summarizes customer reviews for products
+5. Multi-language: AI switches between English + Pidgin automatically
+
+### 8. Risks + How You’ll Handle Them
+
+- WhatsApp API approval: Takes 2-3 days. Apply on Day 1 using test business account
+- 8GB RAM for local AI: You’re using Ollama Cloud so this isn’t an issue
+- Dropshipping logistics: For demo, just show “Order sent to supplier” without real integration. Call it “Manual fulfillment”
+
+---
+
+### 9. What to Put in Your Tomorrow’s Slide Deck
+
+1. Problem: Size mismatch + poor product discovery in Nigerian e-commerce
+2. Solution: WhatsApp AI stylist that recommends size + generates outfit visuals  
+3. How it works: 3-step diagram of Supplier → AI → Customer
+4. Tech stack: Diagram above
+5. MVP vs Phase 2: Show what’s built in 1 month vs what’s future
+6. Revenue model: 25% commission on every sale
+
+---
+
+Bottom line: Focus 80% of month on Supplier portal + WhatsApp AI search + order flow. The image gen + Google Maps are 20% nice-to-haves.
+
+What part feels hardest to you right now? The WhatsApp API setup or the AI integration? I’ll give you the exact code for that part next.
+
+
+
+
+
+
+
+
+
+
+//PRD//..... AI THIS IS THE MAIN SLIDE ...THE ONE ABOVE WAS JUST A SUGGESTION, BUT YOU CAN DRAW MORE KNOWLEDGE FROM THERE......
+Vendo e-commerce __ Vee AI
+Product Requirements Document (PRD) Version 1.0 | Student MVP Project Rocybits Technology,
+Onitsha, Anambra, Nigeria
+1. Product Overview
+Problem
+Nigerian online shoppers often struggle with poor product discovery, delayed customer support, and difficulty ordering
+products across messaging platforms like Telegram and WhatsApp. Small suppliers also lack affordable AI-powered
+storefronts and automated sales systems.
+Solution
+Vee AI is an AI-powered conversational commerce platform that helps customers discover products, receive
+personalized recommendations, search using images or text, and place orders directly through Telegram and
+WhatsApp.
+The platform connects users with local and dropshipping suppliers while automating customer support, smart
+recommendations, order placement, and payment processing through AI agents.
+Revenue Model
+• Product markup commissions (25%)
+• Supplier subscription plans (future)
+• Featured product promotions (future)
+• Logistics partnerships (future)
+2. Target Users
+Customer
+Nigerian shoppers using Telegram or WhatsApp who want a faster and smarter way to discover and order products
+online.
+Supplier
+Local vendors and dropshipping suppliers who want to sell products without building their own website or managing
+customer support manually.
+Admin
+Platform owner managing suppliers, products, AI recommendations, margins, analytics, and order operations from a
+centralized dashboard.
+3. Core Features — MVP
+A. Supplier Onboarding Portal
+• Supplier registration system
+• Product upload with images, prices, sizes, and stock
+• Product approval workflow
+• Automatic 25% markup pricing logic
+B. Telegram AI Shopping Assistant
+• Product search using text prompts
+• Personalized recommendations
+• Smart size recommendation system
+• Image-based product search using AI vision
+• AI-generated outfit/product combination previews
+• Conversational order placement
+C. Order & Logistics Flow
+• Local supplier delivery workflow
+• Dropshipping simulation flow
+• Telegram order notifications
+• Tracking status management
+D. Admin Analytics Dashboard
+• Revenue tracking
+• Product performance analytics
+• Supplier performance monitoring
+4. Technical Architecture
+Frontend & API: Next.js 15 + Bun + Tailwind CSS
+Database: Supabase PostgreSQL
+Authentication: Supabase Auth
+AI Chat: Groq Llama 3.3 70B
+AI Vision: Gemini 1.5 Flash
+Image Generation: Hugging Face SDXL API
+Payments: Flutterwave
+Hosting: Vercel Free Tier
+Bot Framework: python-telegram-bot
+5. Database Schema
+Tables:
+suppliers
+id, name, email, phone, kyc_status, supplier_type
+products
+id, supplier_id, name, description, base_price, selling_price, image_url, sizes, stock, created_at
+users
+id, telegram_id, phone, shoe_size, shirt_size, address, lat, lng, created_at
+orders
+id, user_id, product_id, selling_price, status, payment_ref, tracking_number, created_at
+Pricing Logic:
+selling_price = ROUND(base_price × 1.25)
+6. 4-Week Execution Timeline
+Week 1 — Foundation
+• Setup Next.js + Supabase + Vercel
+• Supplier onboarding system
+• Product upload forms
+• Admin dashboard
+Week 2 — Telegram AI + Search
+• Telegram bot creation
+• Groq API integration
+• Product search API
+• AI conversational flow
+Week 3 — Smart Ordering System
+• User profile + sizing system
+• Flutterwave integration
+• Image upload + vision search
+• Order placement workflow
+Week 4 — Polish & Presentation
+• Outfit generation
+• Google Maps integration
+• Analytics charts
+• Demo recording + slide deck
+7. Migration Plan — Telegram to WhatsApp
+The MVP will launch first on Telegram for easier testing and development. After the project presentation, the system
+can migrate to Meta WhatsApp Cloud API while keeping the same backend logic and AI workflows.
+8. Future Roadmap
+• AI size prediction using photos
+• Voice ordering with Whisper API
+• Inventory synchronization automation
+• Multi-language support (English + Pidgin)
+• AI-powered fraud detection
+9. Success Metrics
+• Supplier onboarding in less than 3 minutes
+• AI response time below 3 seconds
+• End-to-end order creation under 2 minutes
+• Zero-cost MVP deployment using free-tier services
+10. Risks & Mitigation
+Risk: WhatsApp API approval delay
+Mitigation: Use Telegram first for MVP testing
+Risk: Limited local hardware resources
+Mitigation: Use cloud AI APIs instead of local AI models
+Risk: Complex dropshipping integration
+Mitigation: Simulate supplier forwarding during demo
+11. Project Vision
+Vee AI aims to become a conversational AI commerce ecosystem where Nigerians can discover, compare, and
+order products directly from messaging platforms without needing traditional e-commerce websites.
+
+
+
+BRAND COLOERS
+Primary: bright Orange , #f97316
+Background: Dark Charcoal , #111827
+Accent : Soft Cream #fff7ED
+
+Brannd feel:simple , mordern , trustworthy, Whatsapp and telegram - friendly,Nigerian-market friendly
+NOTE:code every logic with Intentional Reasoning and every design with Alluring Perfectionalism = IRAP  

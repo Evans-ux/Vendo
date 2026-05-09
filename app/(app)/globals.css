@@ -1,26 +1,85 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
+/* ─── Vee AI Brand Tokens ─────────────────────────────────────────────────── */
 :root {
+  /* Brand */
+  --brand-orange: #f97316;
+  --brand-orange-hover: #ea6c0a;
+  --brand-charcoal: #111827;
+  --brand-cream: #fff7ed;
+
+  /* Light mode surfaces */
   --background: #ffffff;
-  --foreground: #171717;
+  --surface: #f9fafb;
+  --foreground: #111827;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+
+  /* Shadcn CSS variable bridge */
+  --radius: 0.625rem;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  --primary: #f97316;
+  --primary-foreground: #ffffff;
+  --secondary: #fff7ed;
+  --secondary-foreground: #111827;
+  --muted-foreground: #6b7280;
+  --accent: #fff7ed;
+  --accent-foreground: #111827;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --input: #e5e7eb;
+  --ring: #f97316;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-charcoal: var(--brand-charcoal);
+  --color-brand-cream: var(--brand-cream);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Dark mode — charcoal background, cream text */
+.dark {
+  --background: #111827;
+  --surface: #1f2937;
+  --foreground: #fff7ed;
+  --muted: #9ca3af;
+  --border: #374151;
+  --card: #1f2937;
+  --card-foreground: #fff7ed;
+  --popover: #1f2937;
+  --popover-foreground: #fff7ed;
+  --secondary: #1f2937;
+  --secondary-foreground: #fff7ed;
+  --accent: #1f2937;
+  --accent-foreground: #fff7ed;
+  --input: #374151;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
