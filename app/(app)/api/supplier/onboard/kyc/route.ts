@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
-    // Get authenticated user
     const supabase = await createClient();
     const {
       data: { user },
@@ -15,7 +14,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // Parse form data
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const docType = formData.get("docType") as string;
@@ -27,7 +25,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user from database
     const dbUser = await prisma.user.findUnique({
       where: { email: user.email! },
       include: { supplier: true },
@@ -40,11 +37,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upload file to Supabase Storage (kyc-documents bucket)
+    // Upload to Supabase Storage — kyc-documents bucket (private)
     const fileName = `${dbUser.supplier.id}-${Date.now()}-${file.name}`;
     const fileBuffer = await file.arrayBuffer();
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("kyc-documents")
       .upload(fileName, fileBuffer, {
         contentType: file.type,
@@ -52,23 +49,20 @@ export async function POST(request: NextRequest) {
       });
 
     if (uploadError) {
-      console.error("Upload error:", uploadError);
+      console.error("KYC upload error:", uploadError);
       return NextResponse.json(
         { message: "File upload failed", error: uploadError.message },
         { status: 500 }
       );
     }
 
-    // Get the file URL (private bucket — will need signed URL for admin to view)
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("kyc-documents").getPublicUrl(fileName);
+    // Store the storage path (not a public URL — this is a private bucket)
+    const storagePath = `kyc-documents/${fileName}`;
 
-    // Update supplier record
     await prisma.supplier.update({
       where: { id: dbUser.supplier.id },
       data: {
-        kycDocUrl: publicUrl,
+        kycDocUrl: storagePath,
         kycDocType: docType,
         kycStatus: "PENDING",
         kycSubmittedAt: new Date(),
