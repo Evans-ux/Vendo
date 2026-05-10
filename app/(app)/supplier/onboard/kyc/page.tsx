@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-
 
 const KYC_DOC_TYPES = [
   { value: "NIN", label: "National Identity Number (NIN)" },
@@ -15,104 +18,103 @@ const KYC_DOC_TYPES = [
   { value: "Driver's License", label: "Driver's License" },
 ];
 
+const kycSchema = z.object({
+  docType: z.string().min(1, "Please select a document type"),
+});
+
+type KycFormData = z.infer<typeof kycSchema>;
+
 export default function SupplierOnboardingStep2() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [docType, setDocType] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<KycFormData>({
+    resolver: zodResolver(kycSchema),
+    defaultValues: { docType: "" },
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
+    const selected = e.target.files?.[0];
+    setFileError(null);
 
-    // Validate file type
+    if (!selected) return;
+
     const validTypes = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
-    if (!validTypes.includes(selectedFile.type)) {
-      alert("Please upload a JPG, PNG, or PDF file");
+    if (!validTypes.includes(selected.type)) {
+      setFileError("Please upload a JPG, PNG, or PDF file.");
+      return;
+    }
+    if (selected.size > 5 * 1024 * 1024) {
+      setFileError("File size must be less than 5MB.");
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (selectedFile.size > 5 * 1024 * 1024) {
-      alert("File size must be less than 5MB");
-      return;
-    }
-
-    setFile(selectedFile);
-
-    // Show preview for images
-    if (selectedFile.type.startsWith("image/")) {
+    setFile(selected);
+    if (selected.type.startsWith("image/")) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result as string);
-      };
-      reader.readAsDataURL(selectedFile);
+      reader.onloadend = () => setPreview(reader.result as string);
+      reader.readAsDataURL(selected);
     } else {
       setPreview(null);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!docType || !file) {
-      alert("Please select document type and upload a file");
+  const onSubmit = async (data: KycFormData) => {
+    if (!file) {
+      setFileError("Please upload your identity document.");
       return;
     }
 
-    setLoading(true);
+    const toastId = toast.loading("Uploading your document securely...");
 
     try {
-      // Step 1: Upload file to Supabase Storage
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("docType", docType);
+      formData.append("docType", data.docType);
 
-      const uploadRes = await fetch("/api/supplier/onboard/kyc", {
+      const res = await fetch("/api/supplier/onboard/kyc", {
         method: "POST",
         body: formData,
       });
 
-      if (!uploadRes.ok) {
-        const error = await uploadRes.json();
-        alert(error.message || "Upload failed");
+      const result = await res.json();
+
+      if (!res.ok) {
+        toast.error(result.message || "Upload failed. Please try again.", { id: toastId });
         return;
       }
 
-      // Move to products step
+      toast.success("Document uploaded! Proceeding to add your first product.", { id: toastId });
       router.push("/supplier/onboard/products");
     } catch (err) {
-      console.error(err);
-      alert("Failed to upload document. Please try again.");
-    } finally {
-      setLoading(false);
+      toast.error("Network error. Please check your connection and try again.", { id: toastId });
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Info Box */}
       <div className="bg-brand-charcoal/50 border border-brand-orange/30 rounded-lg p-4">
         <h3 className="font-semibold text-sm text-brand-orange mb-2">Why KYC?</h3>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          We verify all suppliers to ensure a safe marketplace for customers. Your document
-          is stored securely and only reviewed by our administrative team. Verification usually
+          All Vendo suppliers are verified to maintain a trusted marketplace for customers. Your
+          document is stored securely and only reviewed by our admin team. Verification usually
           takes 24–48 hours.
         </p>
       </div>
 
       {/* Document Type */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="docType">
           Document Type <span className="text-brand-orange">*</span>
         </Label>
-        <Select
-          id="docType"
-          value={docType}
-          onChange={(e) => setDocType(e.target.value)}
-          required
-        >
+        <Select id="docType" {...register("docType")}>
           <option value="">Select document type</option>
           {KYC_DOC_TYPES.map((type) => (
             <option key={type.value} value={type.value}>
@@ -120,10 +122,13 @@ export default function SupplierOnboardingStep2() {
             </option>
           ))}
         </Select>
+        {errors.docType && (
+          <p className="text-xs text-destructive mt-1">{errors.docType.message}</p>
+        )}
       </div>
 
       {/* File Upload */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="file">
           Upload Document <span className="text-brand-orange">*</span>
         </Label>
@@ -135,10 +140,7 @@ export default function SupplierOnboardingStep2() {
             onChange={handleFileChange}
             className="hidden"
           />
-          <label
-            htmlFor="file"
-            className="cursor-pointer flex flex-col items-center gap-3"
-          >
+          <label htmlFor="file" className="cursor-pointer flex flex-col items-center gap-3">
             {preview ? (
               <div className="relative group">
                 <img
@@ -152,13 +154,8 @@ export default function SupplierOnboardingStep2() {
               </div>
             ) : (
               <>
-                <div className="w-16 h-16 rounded-full bg-brand-charcoal/20 flex items-center justify-center text-brand-orange mb-2">
-                  <svg
-                    className="w-8 h-8"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
+                <div className="w-16 h-16 rounded-full bg-brand-charcoal/20 flex items-center justify-center text-brand-orange">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -171,17 +168,20 @@ export default function SupplierOnboardingStep2() {
                   Click to upload or drag and drop
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  JPG, PNG, or PDF. Max 5MB.
+                  JPG, PNG, or PDF — max 5MB.
                 </span>
               </>
             )}
             {file && (
-              <span className="text-sm font-medium text-brand-orange mt-2 bg-brand-orange/10 px-3 py-1 rounded-full">
+              <span className="text-sm font-medium text-brand-orange mt-1 bg-brand-orange/10 px-3 py-1 rounded-full">
                 Selected: {file.name}
               </span>
             )}
           </label>
         </div>
+        {fileError && (
+          <p className="text-xs text-destructive mt-1">{fileError}</p>
+        )}
       </div>
 
       {/* Submit */}
@@ -194,12 +194,12 @@ export default function SupplierOnboardingStep2() {
         >
           Back
         </Button>
-        <Button 
-          type="submit" 
-          disabled={loading} 
+        <Button
+          type="submit"
+          disabled={isSubmitting}
           className="flex-1 bg-brand-orange hover:bg-brand-orange/90 text-white"
         >
-          {loading ? "Uploading Document..." : "Continue to Next Step"}
+          {isSubmitting ? "Uploading Document..." : "Continue to Next Step"}
         </Button>
       </div>
     </form>

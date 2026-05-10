@@ -1,26 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 
-
 const PRODUCT_CATEGORIES = [
-  "Footwear",
-  "Tops",
-  "Bottoms",
-  "Dresses",
-  "Accessories",
-  "Bags",
-  "Jewelry",
-  "Other",
+  "Footwear", "Tops", "Bottoms", "Dresses",
+  "Accessories", "Bags", "Jewelry", "Other",
 ];
 
-const SIZE_PRESETS = {
+const SIZE_PRESETS: Record<string, string[]> = {
   Footwear: ["38", "39", "40", "41", "42", "43", "44", "45"],
   Tops: ["XS", "S", "M", "L", "XL", "XXL"],
   Bottoms: ["XS", "S", "M", "L", "XL", "XXL"],
@@ -28,57 +25,94 @@ const SIZE_PRESETS = {
   Other: [],
 };
 
+const productSchema = z.object({
+  name: z
+    .string()
+    .min(3, "Product name must be at least 3 characters")
+    .max(120, "Product name is too long"),
+  category: z.string().min(1, "Please select a category"),
+  description: z
+    .string()
+    .max(500, "Description must be under 500 characters")
+    .optional(),
+  basePrice: z
+    .string()
+    .min(1, "Price is required")
+    .refine(
+      (v) => !isNaN(parseFloat(v)) && parseFloat(v) > 0,
+      "Enter a valid price greater than zero"
+    ),
+  stock: z
+    .string()
+    .min(1, "Stock quantity is required")
+    .refine(
+      (v) => !isNaN(parseInt(v)) && parseInt(v) >= 1,
+      "Stock must be at least 1"
+    ),
+});
+
+type ProductFormData = z.infer<typeof productSchema>;
+
 export default function SupplierOnboardingStep3() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    category: "",
-    basePrice: "",
-    stock: "",
-  });
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<ProductFormData>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      category: "",
+      basePrice: "",
+      stock: "",
+    },
+  });
+
+  const category = watch("category");
+  const basePrice = watch("basePrice");
+  const sizeOptions = SIZE_PRESETS[category] ?? [];
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setImageError(null);
     const files = Array.from(e.target.files || []);
-    
-    // Validate max 5 images
+
     if (images.length + files.length > 5) {
-      alert("Maximum 5 images allowed");
+      toast.warning("You can upload a maximum of 5 product images.");
       return;
     }
 
-    // Validate file types and sizes
     const validFiles = files.filter((file) => {
       if (!file.type.startsWith("image/")) {
-        alert(`${file.name} is not an image`);
+        toast.error(`${file.name} is not a valid image file.`);
         return false;
       }
       if (file.size > 5 * 1024 * 1024) {
-        alert(`${file.name} is larger than 5MB`);
+        toast.error(`${file.name} exceeds the 5MB size limit.`);
         return false;
       }
       return true;
     });
 
-    setImages([...images, ...validFiles]);
-
-    // Generate previews
+    setImages((prev) => [...prev, ...validFiles]);
     validFiles.forEach((file) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = () =>
         setImagePreviews((prev) => [...prev, reader.result as string]);
-      };
       reader.readAsDataURL(file);
     });
   };
 
   const removeImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
-    setImagePreviews(imagePreviews.filter((_, i) => i !== index));
+    setImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
   const toggleSize = (size: string) => {
@@ -87,27 +121,23 @@ export default function SupplierOnboardingStep3() {
     );
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const onSubmit = async (data: ProductFormData) => {
+    // Extra client-side guards not covered by Zod
     if (images.length === 0) {
-      alert("Please upload at least one product image");
+      setImageError("Please upload at least one product image.");
+      return;
+    }
+    if (sizeOptions.length > 0 && selectedSizes.length === 0) {
+      toast.error("Please select at least one available size for this category.");
       return;
     }
 
-    if (selectedSizes.length === 0) {
-      alert("Please select at least one size");
-      return;
-    }
-
-    setLoading(true);
+    const toastId = toast.loading("Uploading images and creating your product...");
 
     try {
-      // Upload images first
+      // Upload images
       const imageFormData = new FormData();
-      images.forEach((image) => {
-        imageFormData.append("images", image);
-      });
+      images.forEach((img) => imageFormData.append("images", img));
 
       const uploadRes = await fetch("/api/supplier/products/upload-images", {
         method: "POST",
@@ -115,92 +145,77 @@ export default function SupplierOnboardingStep3() {
       });
 
       if (!uploadRes.ok) {
-        throw new Error("Image upload failed");
+        const err = await uploadRes.json();
+        toast.error(err.message || "Image upload failed.", { id: toastId });
+        return;
       }
 
       const { imageUrls } = await uploadRes.json();
 
       // Create product
-      const productData = {
-        ...formData,
-        basePrice: parseFloat(formData.basePrice),
-        stock: parseInt(formData.stock),
-        sizes: { available: selectedSizes },
-        imageUrls,
-      };
-
       const productRes = await fetch("/api/supplier/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(productData),
+        body: JSON.stringify({
+          ...data,
+          basePrice: parseFloat(data.basePrice),
+          stock: parseInt(data.stock),
+          sizes: { available: selectedSizes },
+          imageUrls,
+        }),
       });
 
+      const productResult = await productRes.json();
+
       if (!productRes.ok) {
-        const error = await productRes.json();
-        alert(error.message || "Failed to create product");
+        toast.error(productResult.message || "Failed to create product.", { id: toastId });
         return;
       }
 
-      // Onboarding product step complete — redirect to Terms & Conditions
+      toast.success("Product created! One last step — please review our terms.", { id: toastId });
       router.push("/supplier/terms");
     } catch (err) {
-      console.error(err);
-      alert("Failed to create product. Please try again.");
-    } finally {
-      setLoading(false);
+      toast.error("Network error. Please check your connection and try again.", { id: toastId });
     }
   };
 
-  const sizeOptions =
-    formData.category && SIZE_PRESETS[formData.category as keyof typeof SIZE_PRESETS]
-      ? SIZE_PRESETS[formData.category as keyof typeof SIZE_PRESETS]
-      : [];
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Product Name */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="name">
           Product Name <span className="text-brand-orange">*</span>
         </Label>
         <Input
           id="name"
           placeholder="e.g. Black Leather Sneakers"
-          value={formData.name}
-          onChange={(e) =>
-            setFormData({ ...formData, name: e.target.value })
-          }
-          required
           className="focus-visible:ring-brand-orange"
+          {...register("name")}
         />
+        {errors.name && (
+          <p className="text-xs text-destructive mt-1">{errors.name.message}</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Category */}
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="category">
             Category <span className="text-brand-orange">*</span>
           </Label>
-          <Select
-            id="category"
-            value={formData.category}
-            onChange={(e) => {
-              setFormData({ ...formData, category: e.target.value });
-              setSelectedSizes([]); // Reset sizes when category changes
-            }}
-            required
-          >
+          <Select id="category" {...register("category")}>
             <option value="">Select category</option>
             {PRODUCT_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
+              <option key={cat} value={cat}>{cat}</option>
             ))}
           </Select>
+          {errors.category && (
+            <p className="text-xs text-destructive mt-1">{errors.category.message}</p>
+          )}
         </div>
 
         {/* Stock */}
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="stock">
             Stock Quantity <span className="text-brand-orange">*</span>
           </Label>
@@ -208,58 +223,56 @@ export default function SupplierOnboardingStep3() {
             id="stock"
             type="number"
             placeholder="e.g. 50"
-            value={formData.stock}
-            onChange={(e) =>
-              setFormData({ ...formData, stock: e.target.value })
-            }
-            required
             className="focus-visible:ring-brand-orange"
+            {...register("stock")}
           />
+          {errors.stock && (
+            <p className="text-xs text-destructive mt-1">{errors.stock.message}</p>
+          )}
         </div>
       </div>
 
       {/* Description */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="description">Description</Label>
         <Textarea
           id="description"
           placeholder="Describe your product... material, fit, features. This will determine whether or not your goods will sell first."
           rows={3}
-          value={formData.description}
-          onChange={(e) =>
-            setFormData({ ...formData, description: e.target.value })
-          }
           className="focus-visible:ring-brand-orange resize-none"
+          {...register("description")}
         />
+        {errors.description && (
+          <p className="text-xs text-destructive mt-1">{errors.description.message}</p>
+        )}
       </div>
 
       {/* Base Price */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="basePrice">
           Your Cost Price (₦) <span className="text-brand-orange">*</span>
         </Label>
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <span className="text-muted-foreground sm:text-sm">₦</span>
+            <span className="text-muted-foreground text-sm">₦</span>
           </div>
           <Input
             id="basePrice"
             type="number"
             step="0.01"
             placeholder="5000"
-            value={formData.basePrice}
-            onChange={(e) =>
-              setFormData({ ...formData, basePrice: e.target.value })
-            }
-            required
             className="pl-8 focus-visible:ring-brand-orange"
+            {...register("basePrice")}
           />
         </div>
-        {formData.basePrice && (
+        {errors.basePrice && (
+          <p className="text-xs text-destructive mt-1">{errors.basePrice.message}</p>
+        )}
+        {basePrice && !isNaN(parseFloat(basePrice)) && parseFloat(basePrice) > 0 && (
           <div className="mt-2 p-3 bg-brand-charcoal/30 rounded-lg border border-brand-orange/20 flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Selling price (with 25% markup):</span>
             <span className="font-bold text-brand-orange text-lg">
-              ₦{(parseFloat(formData.basePrice) * 1.25).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              ₦{(parseFloat(basePrice) * 1.25).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </span>
           </div>
         )}
@@ -279,8 +292,8 @@ export default function SupplierOnboardingStep3() {
                 onClick={() => toggleSize(size)}
                 className={`px-4 py-2 rounded-md font-medium text-sm transition-all duration-200 ${
                   selectedSizes.includes(size)
-                    ? "bg-brand-orange text-white shadow-md transform scale-105"
-                    : "bg-muted/50 text-foreground hover:bg-muted hover:border-brand-orange/50 border border-transparent"
+                    ? "bg-brand-orange text-white shadow-md scale-105"
+                    : "bg-muted/50 text-foreground hover:bg-muted border border-transparent"
                 }`}
               >
                 {size}
@@ -309,12 +322,7 @@ export default function SupplierOnboardingStep3() {
             className="cursor-pointer flex flex-col items-center gap-3 text-center"
           >
             <div className="w-14 h-14 rounded-full bg-brand-charcoal/20 flex items-center justify-center text-brand-orange">
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -348,20 +356,10 @@ export default function SupplierOnboardingStep3() {
                   <button
                     type="button"
                     onClick={() => removeImage(index)}
-                    className="absolute -top-2 -right-2 bg-destructive text-white rounded-full p-1.5 shadow-md opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110"
+                    className="absolute -top-2 -right-2 bg-destructive text-white rounded-full p-1.5 shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
                   >
-                    <svg
-                      className="w-3 h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
@@ -369,6 +367,9 @@ export default function SupplierOnboardingStep3() {
             </div>
           )}
         </div>
+        {imageError && (
+          <p className="text-xs text-destructive mt-1">{imageError}</p>
+        )}
       </div>
 
       {/* Submit */}
@@ -381,12 +382,12 @@ export default function SupplierOnboardingStep3() {
         >
           Back
         </Button>
-        <Button 
-          type="submit" 
-          disabled={loading} 
+        <Button
+          type="submit"
+          disabled={isSubmitting}
           className="flex-1 bg-brand-orange hover:bg-brand-orange/90 text-white"
         >
-          {loading ? "Creating Product..." : "Complete Setup"}
+          {isSubmitting ? "Creating Product..." : "Complete Setup"}
         </Button>
       </div>
     </form>

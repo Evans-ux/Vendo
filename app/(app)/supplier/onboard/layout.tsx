@@ -22,9 +22,9 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
   ];
 
   const stepDescriptions = [
-    "This is how customers will see your store on Vee AI.",
-    "We need to verify you to keep the platform safe.",
-    "Let's get something on the shelf right away!"
+    "This information will appear on your Vendo store profile.",
+    "All Vendo suppliers are verified to maintain a trusted marketplace.",
+    "Your first product will be listed on Vendo once approved by our team."
   ];
 
   return (
@@ -37,8 +37,8 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
 
       <div className="w-full max-w-3xl z-10">
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-brand-cream mb-2">Supplier Onboarding</h1>
-          <p className="text-brand-cream/70">Join Vee AI and start selling in minutes.</p>
+          <h1 className="text-3xl font-bold text-brand-cream mb-2">Join Vendo</h1>
+          <p className="text-brand-cream/70">Set up your supplier account. Vee AI will handle selling your products to customers.</p>
         </div>
 
         <Card className="bg-background/80 backdrop-blur-md border-muted/20 shadow-2xl overflow-hidden">

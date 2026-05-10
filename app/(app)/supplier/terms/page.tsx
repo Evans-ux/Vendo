@@ -3,41 +3,42 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { CheckSquare, Square, ShieldCheck, AlertCircle } from "lucide-react";
+import { CheckSquare, Square, ShieldCheck } from "lucide-react";
 
 const TERMS_SECTIONS = [
   {
     title: "1. Supplier Agreement",
-    content: `By completing onboarding on Vee AI, you agree to become a verified supplier on the Vendo platform. You confirm that all business information, identity documents, and product details you have provided are accurate, truthful, and belong to you or your business. Providing false information is grounds for immediate account suspension and potential legal action.`,
+    content: `By registering as a supplier on Vendo, you agree to the terms of this agreement. You confirm that all business information, identity documents, and product details you have provided are accurate, truthful, and belong to you or your registered business. Vendo is the platform through which your products are listed and sold. Vee AI is our AI-powered sales assistant that interacts with customers on Telegram and WhatsApp on your behalf. Providing false information is grounds for immediate account suspension and potential legal action.`,
   },
   {
     title: "2. Commission & Pricing",
-    content: `You agree that Vee AI retains a 25% commission on every sale made through the platform. Your products will be listed at a selling price calculated as: Selling Price = Your Base Price × 1.25. You will receive your base price per unit sold, minus any applicable payment processing fees charged by our payment provider (Flutterwave). Vee AI reserves the right to review and update the commission structure with 30 days' notice.`,
+    content: `You agree that Vendo retains a 25% commission on every sale made through the platform. Your products will be listed at a selling price calculated as: Selling Price = Your Base Price × 1.25. You will receive your base price per unit sold, minus any applicable payment processing fees charged by our payment provider (Flutterwave). Vendo reserves the right to review and update the commission structure with 30 days' notice.`,
   },
   {
     title: "3. Product Standards",
-    content: `All products listed on Vee AI must be legitimate, legal, and accurately described. You must not list counterfeit goods, stolen property, prohibited items, or products that infringe on intellectual property rights. Vee AI reserves the right to remove any product at its discretion without prior notice. Repeated violations will result in permanent account removal.`,
+    content: `All products listed on Vendo must be legitimate, legal, and accurately described. You must not list counterfeit goods, stolen property, prohibited items, or products that infringe on intellectual property rights. Vendo reserves the right to remove any product at its discretion without prior notice. Repeated violations will result in permanent account removal.`,
   },
   {
     title: "4. Order Fulfilment Responsibility",
-    content: `You are solely responsible for fulfilling orders assigned to your store within the delivery timeframe stated during onboarding (Local suppliers: 2–3 business days; Dropship suppliers: 14–21 business days). Failure to fulfil orders on time or accurately may result in penalties, negative reviews, or account suspension. Vee AI acts as a marketplace facilitator and is not liable for supplier fulfilment failures.`,
+    content: `You are solely responsible for fulfilling orders assigned to your Vendo store within the delivery timeframe stated during onboarding (Local suppliers: 2–3 business days; Dropship suppliers: 14–21 business days). Failure to fulfil orders on time or accurately may result in penalties, negative reviews, or account suspension. Vendo acts as a marketplace facilitator and is not liable for supplier fulfilment failures. Customer interactions are handled by Vee AI on Telegram and WhatsApp.`,
   },
   {
     title: "5. KYC & Identity Verification",
-    content: `Your KYC documents are stored securely in private Supabase Storage and are only accessible to Vee AI's administrative team for verification purposes. Your documents will not be shared with third parties except where required by Nigerian law or financial regulations. You consent to Vee AI conducting reasonable verification checks on your submitted documents.`,
+    content: `Your KYC documents are stored securely in private Vendo storage and are only accessible to the Vendo administrative team for verification purposes. Your documents will not be shared with third parties except where required by Nigerian law or financial regulations. You consent to Vendo conducting reasonable verification checks on your submitted documents.`,
   },
   {
     title: "6. Account Termination",
-    content: `Vee AI reserves the right to suspend or permanently terminate your supplier account for: (a) providing false information, (b) repeated customer complaints, (c) non-fulfilment of orders, (d) violation of product standards, or (e) any activity deemed harmful to the platform or its users. Upon termination, any unpaid commissions due to you will be reviewed and settled within 14 business days, subject to outstanding disputes.`,
+    content: `Vendo reserves the right to suspend or permanently terminate your supplier account for: (a) providing false information, (b) repeated customer complaints, (c) non-fulfilment of orders, (d) violation of product standards, or (e) any activity deemed harmful to the platform or its users. Upon termination, any unpaid commissions due to you will be reviewed and settled within 14 business days, subject to outstanding disputes.`,
   },
   {
     title: "7. Privacy & Data",
-    content: `By using this platform, you consent to the collection and processing of your business data, transaction history, and product information as outlined in our Privacy Policy. Your data will be used to operate the platform, improve services, and comply with applicable Nigerian laws, including the Nigeria Data Protection Regulation (NDPR). You have the right to request deletion of your data, subject to legal retention requirements.`,
+    content: `By using this platform, you consent to the collection and processing of your business data, transaction history, and product information as outlined in our Privacy Policy. Your data will be used to operate Vendo, power Vee AI's product recommendations, and comply with applicable Nigerian laws including the Nigeria Data Protection Regulation (NDPR). You have the right to request deletion of your data, subject to legal retention requirements.`,
   },
   {
     title: "8. Governing Law",
-    content: `This agreement is governed by the laws of the Federal Republic of Nigeria. Any disputes arising from this agreement shall first be addressed through good-faith negotiation. If unresolved, disputes shall be subject to the jurisdiction of the courts of Anambra State, Nigeria. Rocybits Technology is the registered operator of the Vee AI / Vendo platform.`,
+    content: `This agreement is governed by the laws of the Federal Republic of Nigeria. Any disputes arising from this agreement shall first be addressed through good-faith negotiation. If unresolved, disputes shall be subject to the jurisdiction of the courts of Anambra State, Nigeria. Rocybits Technology is the registered operator of Vendo and its associated services, including the Vee AI customer assistant.`,
   },
 ];
 
@@ -45,28 +46,27 @@ export default function TermsPage() {
   const router = useRouter();
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const handleAccept = async () => {
     if (!agreed) return;
     setLoading(true);
-    setError(null);
 
     try {
       const res = await fetch("/api/supplier/onboard/terms", {
         method: "POST",
       });
 
+      const result = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.message || "Something went wrong. Please try again.");
+        toast.error(result.message || "Something went wrong. Please try again.");
         return;
       }
 
-      // Terms accepted — proceed to the supplier dashboard
+      toast.success("Terms accepted! Welcome to Vendo.");
       router.push("/supplier/dashboard");
     } catch (err) {
-      setError("Network error. Please check your connection and try again.");
+      toast.error("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -109,7 +109,7 @@ export default function TermsPage() {
           {/* Terms Header */}
           <div className="px-6 py-4 border-b border-muted/20 bg-muted/10">
             <p className="text-sm text-muted-foreground">
-              Vee AI Supplier Agreement — Version 1.0 | Rocybits Technology, Onitsha, Anambra, Nigeria
+              Vendo Supplier Agreement — Version 1.0 | Rocybits Technology, Onitsha, Anambra, Nigeria
             </p>
           </div>
 
@@ -149,20 +149,14 @@ export default function TermsPage() {
             )}
           </div>
           <span className="text-sm text-foreground leading-relaxed">
-            I have read and understood the Vee AI Supplier Terms & Conditions. I agree to operate
-            my store in accordance with the policies stated above, including the{" "}
+            I have read and understood the Vendo Supplier Terms & Conditions. I agree to list and fulfil
+            orders through the Vendo platform, with Vee AI handling customer interactions on Telegram
+            and WhatsApp on my behalf. I accept the{" "}
             <span className="text-brand-orange font-medium">25% commission structure</span>,
             fulfilment responsibilities, and KYC verification requirements.
           </span>
         </motion.button>
 
-        {/* Error message */}
-        {error && (
-          <div className="flex items-center gap-2 text-sm text-destructive mb-4 p-3 bg-destructive/10 rounded-lg border border-destructive/20">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
 
         {/* CTA Button */}
         <motion.div

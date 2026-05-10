@@ -1,109 +1,128 @@
 "use client";
 
-import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 
-
 const NIGERIAN_STATES = [
   "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue",
   "Borno", "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "Gombe",
   "Imo", "Jigawa", "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara",
   "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo", "Osun", "Oyo", "Plateau",
-  "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara", "FCT"
+  "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara", "FCT",
 ];
+
+const profileSchema = z.object({
+  businessName: z
+    .string()
+    .min(2, "Business name must be at least 2 characters")
+    .max(80, "Business name is too long"),
+  phone: z
+    .string()
+    .regex(
+      /^(0|\+234)[789][01]\d{8}$/,
+      "Enter a valid Nigerian phone number (e.g. 08012345678)"
+    ),
+  state: z.string().optional(),
+  supplierType: z.enum(["LOCAL", "DROPSHIP"] as const, {
+    error: "Please select a supplier type",
+  }),
+  address: z.string().optional(),
+  bio: z.string().max(300, "Description must be under 300 characters").optional(),
+});
+
+type ProfileFormData = z.infer<typeof profileSchema>;
 
 export default function SupplierOnboardingStep1() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    businessName: "",
-    phone: "",
-    address: "",
-    state: "",
-    supplierType: "LOCAL",
-    bio: "",
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ProfileFormData>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      businessName: "",
+      phone: "",
+      address: "",
+      state: "",
+      supplierType: "LOCAL",
+      bio: "",
+    },
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const onSubmit = async (data: ProfileFormData) => {
+    const toastId = toast.loading("Saving your business profile...");
 
     try {
       const res = await fetch("/api/supplier/onboard/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(data),
       });
 
+      const result = await res.json();
+
       if (!res.ok) {
-        const error = await res.json();
-        alert(error.message || "Something went wrong");
+        toast.error(result.message || "Failed to save profile.", { id: toastId });
         return;
       }
 
-      // Move to KYC step
+      toast.success("Profile saved! Moving to KYC verification.", { id: toastId });
       router.push("/supplier/onboard/kyc");
     } catch (err) {
-      console.error(err);
-      alert("Failed to save profile. Please try again.");
-    } finally {
-      setLoading(false);
+      toast.error("Network error. Please check your connection and try again.", { id: toastId });
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Business Name */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="businessName">
-          Business Name <span className="text-destructive">*</span>
+          Business Name <span className="text-brand-orange">*</span>
         </Label>
         <Input
           id="businessName"
           placeholder="e.g. Rocybits Fashion Store"
-          value={formData.businessName}
-          onChange={(e) =>
-            setFormData({ ...formData, businessName: e.target.value })
-          }
-          required
           className="focus-visible:ring-brand-orange"
+          {...register("businessName")}
         />
+        {errors.businessName && (
+          <p className="text-xs text-destructive mt-1">{errors.businessName.message}</p>
+        )}
       </div>
 
       {/* Phone */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="phone">
-          Phone Number <span className="text-destructive">*</span>
+          Phone Number <span className="text-brand-orange">*</span>
         </Label>
         <Input
           id="phone"
           type="tel"
           placeholder="e.g. 08012345678"
-          value={formData.phone}
-          onChange={(e) =>
-            setFormData({ ...formData, phone: e.target.value })
-          }
-          required
           className="focus-visible:ring-brand-orange"
+          {...register("phone")}
         />
+        {errors.phone && (
+          <p className="text-xs text-destructive mt-1">{errors.phone.message}</p>
+        )}
       </div>
 
       {/* State & Supplier Type (Side-by-side) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="state">State</Label>
-          <Select
-            id="state"
-            value={formData.state}
-            onChange={(e) =>
-              setFormData({ ...formData, state: e.target.value })
-            }
-          >
+          <Select id="state" className="focus-visible:ring-brand-orange" {...register("state")}>
             <option value="">Select state</option>
             {NIGERIAN_STATES.map((state) => (
               <option key={state} value={state}>
@@ -113,57 +132,50 @@ export default function SupplierOnboardingStep1() {
           </Select>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="supplierType">
-            Supplier Type <span className="text-destructive">*</span>
+            Supplier Type <span className="text-brand-orange">*</span>
           </Label>
-          <Select
-            id="supplierType"
-            value={formData.supplierType}
-            onChange={(e) =>
-              setFormData({ ...formData, supplierType: e.target.value })
-            }
-            required
-          >
+          <Select id="supplierType" {...register("supplierType")}>
             <option value="LOCAL">Local (I ship products myself)</option>
             <option value="DROPSHIP">Dropship (Third-party fulfillment)</option>
           </Select>
-          <p className="text-xs text-muted-foreground mt-1">
+          {errors.supplierType && (
+            <p className="text-xs text-destructive mt-1">{errors.supplierType.message}</p>
+          )}
+          <p className="text-xs text-muted-foreground">
             Local: 2–3 day delivery. Dropship: 14–21 days.
           </p>
         </div>
       </div>
 
       {/* Address */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="address">Physical Address</Label>
         <Input
           id="address"
           placeholder="e.g. 12 Market Road, Onitsha"
-          value={formData.address}
-          onChange={(e) =>
-            setFormData({ ...formData, address: e.target.value })
-          }
           className="focus-visible:ring-brand-orange"
+          {...register("address")}
         />
         <p className="text-xs text-muted-foreground">
-          Required for local suppliers, optional for dropshippers
+          Required for local suppliers, optional for dropshippers.
         </p>
       </div>
 
       {/* Bio */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="bio">Store Description</Label>
         <Textarea
           id="bio"
           placeholder="Tell customers about what you sell and why they should buy from you..."
           rows={3}
-          value={formData.bio}
-          onChange={(e) =>
-            setFormData({ ...formData, bio: e.target.value })
-          }
           className="focus-visible:ring-brand-orange resize-none"
+          {...register("bio")}
         />
+        {errors.bio && (
+          <p className="text-xs text-destructive mt-1">{errors.bio.message}</p>
+        )}
       </div>
 
       {/* Submit */}
@@ -176,12 +188,12 @@ export default function SupplierOnboardingStep1() {
         >
           Cancel
         </Button>
-        <Button 
-          type="submit" 
-          disabled={loading} 
+        <Button
+          type="submit"
+          disabled={isSubmitting}
           className="flex-1 bg-brand-orange hover:bg-brand-orange/90 text-white"
         >
-          {loading ? "Saving Profile..." : "Continue to Next Step"}
+          {isSubmitting ? "Saving Profile..." : "Continue to Next Step"}
         </Button>
       </div>
     </form>
