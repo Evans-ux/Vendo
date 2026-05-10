@@ -1,2 +1,6 @@
 {
+<<<<<<< HEAD
+=======
+    "typescript.autoClosingTags": false
+>>>>>>> feature-auth
 }
