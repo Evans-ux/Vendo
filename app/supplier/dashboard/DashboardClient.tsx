@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { logout } from '@/app/actions/auth'
-import Card from '@/components/ui/Card'
-import Button from '@/components/ui/Button'
-import toast from 'react-hot-toast'
+import Card from '@/components/ui/card'
+import Button from '@/components/ui/button'
+import { toast } from 'sonner'
 
 interface Supplier {
   id: string

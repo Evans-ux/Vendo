@@ -237,7 +237,7 @@ export default function SupplierOnboardingStep3() {
         <Label htmlFor="description">Description</Label>
         <Textarea
           id="description"
-          placeholder="Describe your product... material, fit, features. This will determine whether or not your goods will sell first."
+          placeholder="Describe your product... material, fit, features."
           rows={3}
           className="focus-visible:ring-brand-orange resize-none"
           {...register("description")}
