@@ -49,6 +49,7 @@ export default function LoginPage() {
         toast.error(result.error)
       } else {
         toast.success('Logged in successfully!')
+        router.push("/supplier/onboard")
       }
     } catch (error) {
       toast.error('An unexpected error occurred')
@@ -204,7 +205,7 @@ export default function LoginPage() {
             <p className="text-gray-400">
               Don't have an account?{' '}
               <Link 
-                href="/supplier/signup" 
+                href="/auth/signup" 
                 className="text-orange-500 hover:text-orange-400 font-semibold transition-colors inline-flex items-center gap-1"
               >
                 Sign up

@@ -68,6 +68,7 @@ export default function SignupPage() {
         toast.error(result.error)
       } else if (result?.success) {
         toast.success(result.message || 'Account created! Please check your email.')
+        router.push("/auth/verify-email")
         // Clear form
         setFormData({
           full_name: '',
@@ -339,7 +340,7 @@ export default function SignupPage() {
             <p className="text-gray-400">
               Already have an account?{' '}
               <Link 
-                href="/supplier/login" 
+                href="/auth/login" 
                 className="text-orange-500 hover:text-orange-400 font-semibold transition-colors inline-flex items-center gap-1"
               >
                 Sign in

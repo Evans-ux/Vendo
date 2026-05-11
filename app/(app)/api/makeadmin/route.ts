@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 /**
  * INTERNAL UTILITY — use via Apidog or Postman to promote a user to ADMIN.
  * Request body: { "email": "user@example.com" }
- * Keep this route protected or remove it before going to production.
+ * Remove or protect this route before going to production.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -15,9 +15,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Email is required" }, { status: 400 });
     }
 
-    const updatedUser = await prisma.user.update({
+    // Upsert — creates the User row if it doesn't exist yet in Prisma
+    // (user may exist in Supabase Auth but not yet synced to our DB)
+    const updatedUser = await prisma.user.upsert({
       where: { email },
-      data: { role: "ADMIN" },
+      update: { role: "ADMIN" },
+      create: {
+        email,
+        role: "ADMIN",
+      },
     });
 
     return NextResponse.json({

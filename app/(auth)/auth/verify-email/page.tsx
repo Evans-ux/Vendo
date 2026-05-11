@@ -64,7 +64,7 @@ export default function VerifyEmailPage() {
           {/* Actions */}
           <div className="space-y-3">
             <Link
-              href="/supplier/login"
+              href="/auth/login"
               className="block w-full py-3 px-6 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 transition-all duration-200"
             >
               Go to Login
@@ -72,7 +72,7 @@ export default function VerifyEmailPage() {
             
             <p className="text-sm text-gray-500">
               Didn't receive the email?{' '}
-              <Link href="/supplier/signup" className="text-orange-500 hover:text-orange-400 font-medium">
+              <Link href="/auth/signup" className="text-orange-500 hover:text-orange-400 font-medium">
                 Try again
               </Link>
             </p>
