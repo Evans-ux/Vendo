@@ -1,20 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { signup } from '@/app/actions/auth'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
-  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
     full_name: '',
-    business_name: '',
     email: '',
-    phone: '',
     password: '',
     confirmPassword: '',
   })
@@ -26,21 +22,15 @@ export default function SignupPage() {
     if (!formData.full_name.trim()) {
       newErrors.full_name = 'Full name is required'
     }
-    if (!formData.business_name.trim()) {
-      newErrors.business_name = 'Business name is required'
-    }
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required'
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid'
-    }
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone is required'
+      newErrors.email = 'Please enter a valid email address'
     }
     if (!formData.password) {
       newErrors.password = 'Password is required'
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters'
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters'
     }
     if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match'
@@ -54,7 +44,9 @@ export default function SignupPage() {
     e.preventDefault()
     
     if (!validateForm()) {
-      toast.error('Please fix the errors in the form')
+      toast.error('Please fix the errors in the form', {
+        description: 'Check all required fields and try again'
+      })
       return
     }
 
@@ -65,22 +57,24 @@ export default function SignupPage() {
       const result = await signup(signupData)
 
       if (result?.error) {
-        toast.error(result.error)
+        toast.error('Signup Failed', {
+          description: result.error
+        })
       } else if (result?.success) {
-        toast.success(result.message || 'Account created! Please check your email.')
-        router.push("/auth/verify-email")
-        // Clear form
+        toast.success('Account Created!', {
+          description: 'Please check your email to verify your account'
+        })
         setFormData({
           full_name: '',
-          business_name: '',
           email: '',
-          phone: '',
           password: '',
           confirmPassword: '',
         })
       }
     } catch (error) {
-      toast.error('An unexpected error occurred')
+      toast.error('Something went wrong', {
+        description: 'Please try again later'
+      })
     } finally {
       setIsLoading(false)
     }
@@ -96,18 +90,16 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 flex items-center justify-center p-4">
-      {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl"></div>
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl"></div>
       </div>
 
       <div className="w-full max-w-md relative z-10">
-        {/* Logo and Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center mb-4">
             <Image 
-              src="/Vedo-logobag.png" 
+              src="/vendo-logo.png" 
               alt="Vendo Logo" 
               width={200}
               height={80}
@@ -121,10 +113,8 @@ export default function SignupPage() {
           <p className="text-gray-400">Create your supplier account and start selling</p>
         </div>
 
-        {/* Form Card */}
         <div className="bg-gray-800/50 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-700/50 p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Full Name */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Full Name
@@ -155,103 +145,36 @@ export default function SignupPage() {
               )}
             </div>
 
-            {/* Business Name */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Business Name
+                Email Address
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
                 </div>
                 <input
-                  type="text"
-                  name="business_name"
-                  value={formData.business_name}
+                  type="email"
+                  name="email"
+                  value={formData.email}
                   onChange={handleChange}
                   disabled={isLoading}
-                  placeholder="Acme Corporation"
+                  placeholder="you@example.com"
                   className="w-full pl-12 pr-4 py-3.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all disabled:opacity-50"
                 />
               </div>
-              {errors.business_name && (
+              {errors.email && (
                 <p className="mt-1.5 text-sm text-red-400 flex items-center gap-1">
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
-                  {errors.business_name}
+                  {errors.email}
                 </p>
               )}
             </div>
 
-            {/* Email and Phone - Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Email
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    disabled={isLoading}
-                    placeholder="you@example.com"
-                    className="w-full pl-12 pr-4 py-3.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all disabled:opacity-50"
-                  />
-                </div>
-                {errors.email && (
-                  <p className="mt-1.5 text-sm text-red-400 flex items-center gap-1">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    {errors.email}
-                  </p>
-                )}
-              </div>
-
-              {/* Phone */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Phone
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                  </div>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    disabled={isLoading}
-                    placeholder="+234 (0)80 6387 030 3"
-                    className="w-full pl-12 pr-4 py-3.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all disabled:opacity-50"
-                  />
-                </div>
-                {errors.phone && (
-                  <p className="mt-1.5 text-sm text-red-400 flex items-center gap-1">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    {errors.phone}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Password */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Password
@@ -282,7 +205,6 @@ export default function SignupPage() {
               )}
             </div>
 
-            {/* Confirm Password */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Confirm Password
@@ -313,7 +235,6 @@ export default function SignupPage() {
               )}
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoading}
@@ -335,7 +256,6 @@ export default function SignupPage() {
             </button>
           </form>
 
-          {/* Sign In Link */}
           <div className="mt-6 text-center">
             <p className="text-gray-400">
               Already have an account?{' '}
@@ -352,7 +272,6 @@ export default function SignupPage() {
           </div>
         </div>
 
-        {/* Footer */}
         <p className="text-center text-gray-500 text-sm mt-6">
           By signing up, you agree to our Terms of Service and Privacy Policy
         </p>

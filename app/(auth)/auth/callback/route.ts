@@ -11,6 +11,6 @@ export async function GET(request: NextRequest) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // After email verification, send to onboarding
-  return NextResponse.redirect(new URL('/supplier/onboard', request.url))
+  // Redirect to login page after email verification
+  return NextResponse.redirect(new URL('/auth/login', request.url))
 }

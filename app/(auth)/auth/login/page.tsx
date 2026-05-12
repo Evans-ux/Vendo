@@ -79,7 +79,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center mb-4">
             <Image 
-              src="/Vedo-logobag.png" 
+              src="/vendo-logo.png" 
               alt="Vendo Logo" 
               width={200}
               height={80}
