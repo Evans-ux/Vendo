@@ -49,7 +49,7 @@ export default function LoginPage() {
         toast.error(result.error)
       } else {
         toast.success('Logged in successfully!')
-        router.push("/supplier/onboard")
+        router.push("/supplier/dashboard")
       }
     } catch (error) {
       toast.error('An unexpected error occurred')
@@ -79,7 +79,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center mb-4">
             <Image 
-              src="/vendo-logo.png" 
+              src="/Vedo-logobag.png" 
               alt="Vendo Logo" 
               width={200}
               height={80}

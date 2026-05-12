@@ -107,7 +107,7 @@ export default function SignupPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center mb-4">
             <Image 
-              src="/vendo-logo.png" 
+              src="/Vedo-logobag.png" 
               alt="Vendo Logo" 
               width={200}
               height={80}
@@ -236,7 +236,7 @@ export default function SignupPage() {
                     value={formData.phone}
                     onChange={handleChange}
                     disabled={isLoading}
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="+234 (0)80 6387 030 3"
                     className="w-full pl-12 pr-4 py-3.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all disabled:opacity-50"
                   />
                 </div>

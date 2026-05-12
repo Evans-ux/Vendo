@@ -26,7 +26,7 @@ export default function Home() {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
-            href="/supplier/onboard"
+            href="/auth/signup"
             className="inline-flex items-center justify-center px-8 py-3 rounded-lg bg-brand-orange hover:bg-brand-orange/90 text-white font-semibold transition-colors"
           >
             Become a Supplier
