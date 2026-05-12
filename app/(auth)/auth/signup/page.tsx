@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { signup } from '@/app/actions/auth'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
     full_name: '',
@@ -42,11 +44,9 @@ export default function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!validateForm()) {
-      toast.error('Please fix the errors in the form', {
-        description: 'Check all required fields and try again'
-      })
+      toast.error('Please fix the errors in the form')
       return
     }
 
@@ -57,24 +57,14 @@ export default function SignupPage() {
       const result = await signup(signupData)
 
       if (result?.error) {
-        toast.error('Signup Failed', {
-          description: result.error
-        })
+        toast.error(result.error)
       } else if (result?.success) {
-        toast.success('Account Created!', {
-          description: 'Please check your email to verify your account'
-        })
-        setFormData({
-          full_name: '',
-          email: '',
-          password: '',
-          confirmPassword: '',
-        })
+        toast.success('Account created! Check your email to verify.')
+        // Navigate to the verify-email page
+        router.push('/auth/verify-email')
       }
     } catch (error) {
-      toast.error('Something went wrong', {
-        description: 'Please try again later'
-      })
+      toast.error('Something went wrong. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -98,27 +88,24 @@ export default function SignupPage() {
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center mb-4">
-            <Image 
-              src="/vendo-logo.png" 
-              alt="Vendo Logo" 
+            <Image
+              src="/vendo-logo.png"
+              alt="Vendo Logo"
               width={200}
               height={80}
               className="h-20 w-auto"
               priority
             />
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">
-            Join Vendo
-          </h1>
+          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">Join Vendo</h1>
           <p className="text-gray-400">Create your supplier account and start selling</p>
         </div>
 
         <div className="bg-gray-800/50 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-700/50 p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Full Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Full Name
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -135,20 +122,12 @@ export default function SignupPage() {
                   className="w-full pl-12 pr-4 py-3.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all disabled:opacity-50"
                 />
               </div>
-              {errors.full_name && (
-                <p className="mt-1.5 text-sm text-red-400 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  {errors.full_name}
-                </p>
-              )}
+              {errors.full_name && <p className="mt-1.5 text-sm text-red-400">{errors.full_name}</p>}
             </div>
 
+            {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email Address
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -165,20 +144,12 @@ export default function SignupPage() {
                   className="w-full pl-12 pr-4 py-3.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all disabled:opacity-50"
                 />
               </div>
-              {errors.email && (
-                <p className="mt-1.5 text-sm text-red-400 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  {errors.email}
-                </p>
-              )}
+              {errors.email && <p className="mt-1.5 text-sm text-red-400">{errors.email}</p>}
             </div>
 
+            {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Password
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -195,20 +166,12 @@ export default function SignupPage() {
                   className="w-full pl-12 pr-4 py-3.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all disabled:opacity-50"
                 />
               </div>
-              {errors.password && (
-                <p className="mt-1.5 text-sm text-red-400 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  {errors.password}
-                </p>
-              )}
+              {errors.password && <p className="mt-1.5 text-sm text-red-400">{errors.password}</p>}
             </div>
 
+            {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Confirm Password
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Confirm Password</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -225,14 +188,7 @@ export default function SignupPage() {
                   className="w-full pl-12 pr-4 py-3.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all disabled:opacity-50"
                 />
               </div>
-              {errors.confirmPassword && (
-                <p className="mt-1.5 text-sm text-red-400 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  {errors.confirmPassword}
-                </p>
-              )}
+              {errors.confirmPassword && <p className="mt-1.5 text-sm text-red-400">{errors.confirmPassword}</p>}
             </div>
 
             <button
@@ -259,14 +215,8 @@ export default function SignupPage() {
           <div className="mt-6 text-center">
             <p className="text-gray-400">
               Already have an account?{' '}
-              <Link 
-                href="/auth/login" 
-                className="text-orange-500 hover:text-orange-400 font-semibold transition-colors inline-flex items-center gap-1"
-              >
+              <Link href="/auth/login" className="text-orange-500 hover:text-orange-400 font-semibold transition-colors">
                 Sign in
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
               </Link>
             </p>
           </div>
