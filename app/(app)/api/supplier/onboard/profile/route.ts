@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
-    // Get authenticated user from Supabase
     const supabase = await createClient();
     const {
       data: { user },
@@ -15,7 +14,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // Parse request body
     const body = await request.json();
     const { businessName, phone, address, state, supplierType, bio } = body;
 
@@ -26,29 +24,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user exists in our database
+    // Upsert the User row (Supabase Auth is the source of truth for identity)
     let dbUser = await prisma.user.findUnique({
       where: { email: user.email! },
     });
 
-    // Create user if doesn't exist
     if (!dbUser) {
       dbUser = await prisma.user.create({
         data: {
           email: user.email!,
-          name: user.user_metadata?.name || null,
-          role: "CUSTOMER", // Will be upgraded to SUPPLIER after KYC approval
+          name: user.user_metadata?.full_name || user.user_metadata?.name || null,
+          role: "CUSTOMER",
         },
       });
     }
 
-    // Check if supplier profile already exists
+    // Upsert Supplier profile
     const existingSupplier = await prisma.supplier.findUnique({
       where: { userId: dbUser.id },
     });
 
     if (existingSupplier) {
-      // Update existing profile
       await prisma.supplier.update({
         where: { userId: dbUser.id },
         data: {
@@ -62,7 +58,6 @@ export async function POST(request: NextRequest) {
         },
       });
     } else {
-      // Create new supplier profile
       await prisma.supplier.create({
         data: {
           userId: dbUser.id,
@@ -77,10 +72,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      message: "Profile saved successfully",
-      success: true,
-    });
+    return NextResponse.json({ message: "Profile saved successfully", success: true });
   } catch (error: any) {
     console.error("Profile save error:", error);
     return NextResponse.json(

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
@@ -27,22 +27,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (dbUser.supplier.termsAcceptedAt) {
-      // Already accepted — just redirect
+      // Already accepted — idempotent
       return NextResponse.json({ message: "Terms already accepted", success: true });
     }
 
-    // Stamp the exact time the supplier accepted — creates a legal audit trail
+    // Timestamp the acceptance for legal audit trail
     await prisma.supplier.update({
       where: { id: dbUser.supplier.id },
-      data: {
-        termsAcceptedAt: new Date(),
-      },
+      data: { termsAcceptedAt: new Date() },
     });
 
-    return NextResponse.json({
-      message: "Terms accepted successfully",
-      success: true,
-    });
+    return NextResponse.json({ message: "Terms accepted successfully", success: true });
   } catch (error: any) {
     console.error("Terms acceptance error:", error);
     return NextResponse.json(

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 import DashboardClient from "./DashboardClient";
 
-export default async function DashboardPage() {
+export default async function SupplierDashboardPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,24 +13,20 @@ export default async function DashboardPage() {
     redirect("/auth/login");
   }
 
+  // Get full supplier profile from Prisma
   const dbUser = await prisma.user.findUnique({
     where: { email: user.email! },
-    include: { supplier: true },
+    include: {
+      supplier: {
+        include: { products: true },
+      },
+    },
   });
 
+  // If no supplier profile yet, send them to onboarding
   if (!dbUser?.supplier) {
     redirect("/supplier/onboard");
   }
 
-  // Shape data to match the original DashboardClient interface
-  const supplier = {
-    id: dbUser.supplier.id,
-    full_name: dbUser.name ?? "",
-    business_name: dbUser.supplier.businessName,
-    email: dbUser.email,
-    phone: dbUser.supplier.phone,
-    created_at: dbUser.supplier.createdAt.toISOString(),
-  };
-
-  return <DashboardClient supplier={supplier} />;
+  return <DashboardClient supplier={dbUser.supplier} productCount={dbUser.supplier.products.length} />;
 }

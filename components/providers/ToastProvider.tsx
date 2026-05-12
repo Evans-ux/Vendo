@@ -1,11 +1,12 @@
 'use client'
 
-import { Toaster } from 'react-hot-toast'
+import { Toaster } from "sonner"
 
 export default function ToastProvider() {
   return (
     <Toaster
       position="top-right"
+      richColors
       toastOptions={{
         duration: 4000,
         style: {
@@ -13,18 +14,6 @@ export default function ToastProvider() {
           color: '#fff',
           border: '1px solid #374151',
           borderRadius: '0.75rem',
-        },
-        success: {
-          iconTheme: {
-            primary: '#F97316',
-            secondary: '#fff',
-          },
-        },
-        error: {
-          iconTheme: {
-            primary: '#EF4444',
-            secondary: '#fff',
-          },
         },
       }}
     />
