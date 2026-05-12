@@ -1,8 +1,3 @@
 {
-<<<<<<< HEAD
-
+  "typescript.autoClosingTags": true
 }
-=======
-  "typescript.autoClosingTags": false
-}
->>>>>>> 26aa57d35c2d66a171cbe4ec3ed0eea03b7495af
