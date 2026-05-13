@@ -56,7 +56,11 @@ export default function VerifyEmailPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-orange-500 font-bold">3.</span>
-                <span>You'll be redirected to your dashboard</span>
+                <span>You'll be redirected to login</span>
+              </li>
+               <li className="flex items-start gap-2">
+                <span className="text-orange-500 font-bold">4.</span>
+                <span>login and commence to onboarding</span>https://chatgpt.com/s/m_6a043548e15081919d84f45a4ce82394
               </li>
             </ol>
           </div>

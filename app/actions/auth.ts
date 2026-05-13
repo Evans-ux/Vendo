@@ -18,7 +18,8 @@ export async function signup(data: SignupData) {
     email: data.email,
     password: data.password,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/login`,
+      // After clicking the email link, Supabase exchanges the code here
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
       data: {
         full_name: data.full_name,
       },
@@ -53,30 +54,22 @@ export async function login(email: string, password: string) {
     return { error: 'Login failed' }
   }
 
-  // Check if user exists in database and get onboarding status
+  // Check onboarding status and route accordingly
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: data.user.id },
-      include: { supplier: true }
+    const dbUser = await prisma.user.findUnique({
+      where: { email: data.user.email! },
+      include: { supplier: true },
     })
 
-    // If no supplier record, redirect to onboarding
-    if (!user?.supplier) {
+    if (!dbUser?.supplier || dbUser.supplier.onboardingStep !== 'COMPLETED') {
       revalidatePath('/supplier/onboard')
       redirect('/supplier/onboard')
     }
 
-    // Check onboarding status
-    if (user.supplier.onboardingStep === 'COMPLETED') {
-      revalidatePath('/supplier/dashboard')
-      redirect('/supplier/dashboard')
-    } else {
-      revalidatePath('/supplier/onboard')
-      redirect('/supplier/onboard')
-    }
-  } catch (error) {
-    console.error('Error checking user status:', error)
-    // If user doesn't exist in DB yet, redirect to onboarding
+    revalidatePath('/supplier/dashboard')
+    redirect('/supplier/dashboard')
+  } catch (err) {
+    // User not in DB yet — send to onboarding
     revalidatePath('/supplier/onboard')
     redirect('/supplier/onboard')
   }

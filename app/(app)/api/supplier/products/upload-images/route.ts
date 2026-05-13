@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
     const imageUrls: string[] = [];
 
     for (const image of images) {
-      const fileName = `${user.id}-${Date.now()}-${image.name}`;
+      // Path must be {user-id}/{filename} — RLS policy checks foldername[1] = auth.uid()
+      const fileName = `${user.id}/${Date.now()}-${image.name}`;
       const fileBuffer = await image.arrayBuffer();
 
       const { error: uploadError } = await supabase.storage
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
 
       if (uploadError) {
         console.error("Image upload error:", uploadError);
-        continue; // skip failed uploads, don't abort the whole batch
+        continue;
       }
 
       const {
