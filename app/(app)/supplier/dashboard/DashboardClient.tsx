@@ -225,6 +225,12 @@ export default function DashboardClient({ supplier, productCount }: DashboardCli
           <h3 className="text-lg font-semibold text-brand-cream mb-4">Quick Actions</h3>
           <div className="flex flex-wrap gap-3">
             <button
+              onClick={() => router.push("/supplier/orders")}
+              className="px-4 py-2 rounded-lg bg-brand-orange hover:bg-brand-orange/90 text-white text-sm font-medium transition-colors"
+            >
+              📦 View Orders
+            </button>
+            <button
               onClick={() => router.push("/supplier/onboard/products")}
               className="px-4 py-2 rounded-lg bg-brand-orange hover:bg-brand-orange/90 text-white text-sm font-medium transition-colors"
             >
