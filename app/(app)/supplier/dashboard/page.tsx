@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
+import type { Product } from "@prisma/client";
 import DashboardClient from "./DashboardClient";
 
 export default async function SupplierDashboardPage() {
@@ -50,7 +51,7 @@ export default async function SupplierDashboardPage() {
     termsAcceptedAt: s.termsAcceptedAt?.toISOString() ?? null,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
-    products: s.products.map((p) => ({
+    products: s.products.map((p: Product) => ({
       id: p.id,
       supplierId: p.supplierId,
       name: p.name,

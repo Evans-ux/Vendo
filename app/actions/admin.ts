@@ -1,7 +1,6 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 // ============================================
@@ -19,23 +18,11 @@ export async function getAllSuppliers(filters?: {
         ...(filters?.kycStatus && { kycStatus: filters.kycStatus }),
       },
       include: {
-        user: {
-          select: {
-            email: true,
-            name: true,
-          },
-        },
-        _count: {
-          select: {
-            products: true,
-          },
-        },
+        user: { select: { email: true, name: true } },
+        _count: { select: { products: true } },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     })
-
     return { success: true, suppliers }
   } catch (error) {
     console.error('Error fetching suppliers:', error)
@@ -49,17 +36,10 @@ export async function getSupplierById(supplierId: string) {
       where: { id: supplierId },
       include: {
         user: true,
-        products: {
-          take: 10,
-          orderBy: { createdAt: 'desc' },
-        },
+        products: { take: 10, orderBy: { createdAt: 'desc' } },
       },
     })
-
-    if (!supplier) {
-      return { success: false, error: 'Supplier not found' }
-    }
-
+    if (!supplier) return { success: false, error: 'Supplier not found' }
     return { success: true, supplier }
   } catch (error) {
     console.error('Error fetching supplier:', error)
@@ -69,19 +49,12 @@ export async function getSupplierById(supplierId: string) {
 
 export async function toggleSupplierStatus(supplierId: string) {
   try {
-    const supplier = await prisma.supplier.findUnique({
-      where: { id: supplierId },
-    })
-
-    if (!supplier) {
-      return { success: false, error: 'Supplier not found' }
-    }
-
+    const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } })
+    if (!supplier) return { success: false, error: 'Supplier not found' }
     await prisma.supplier.update({
       where: { id: supplierId },
       data: { isActive: !supplier.isActive },
     })
-
     revalidatePath('/admin/suppliers')
     return { success: true, message: 'Supplier status updated' }
   } catch (error) {
@@ -97,23 +70,10 @@ export async function toggleSupplierStatus(supplierId: string) {
 export async function getPendingKYC() {
   try {
     const suppliers = await prisma.supplier.findMany({
-      where: {
-        kycStatus: 'PENDING',
-        kycDocUrl: { not: null },
-      },
-      include: {
-        user: {
-          select: {
-            email: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: {
-        kycSubmittedAt: 'asc',
-      },
+      where: { kycStatus: 'PENDING', kycDocUrl: { not: null } },
+      include: { user: { select: { email: true, name: true } } },
+      orderBy: { kycSubmittedAt: 'asc' },
     })
-
     return { success: true, suppliers }
   } catch (error) {
     console.error('Error fetching pending KYC:', error)
@@ -132,19 +92,13 @@ export async function approveKYC(supplierId: string) {
         onboardingStep: 'COMPLETED',
       },
     })
-
-    // Update user role to SUPPLIER
-    const supplier = await prisma.supplier.findUnique({
-      where: { id: supplierId },
-    })
-
+    const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } })
     if (supplier) {
       await prisma.user.update({
         where: { id: supplier.userId },
         data: { role: 'SUPPLIER' },
       })
     }
-
     revalidatePath('/admin/kyc')
     return { success: true, message: 'KYC approved successfully' }
   } catch (error) {
@@ -163,7 +117,6 @@ export async function rejectKYC(supplierId: string, reason: string) {
         kycReviewedAt: new Date(),
       },
     })
-
     revalidatePath('/admin/kyc')
     return { success: true, message: 'KYC rejected' }
   } catch (error) {
@@ -176,42 +129,24 @@ export async function rejectKYC(supplierId: string, reason: string) {
 // ORDER MANAGEMENT
 // ============================================
 
-export async function getAllOrders(filters?: {
-  status?: string
-  supplierId?: string
-}) {
+export async function getAllOrders(filters?: { status?: string }) {
   try {
     const orders = await prisma.order.findMany({
-      where: {
-        ...(filters?.status && { status: filters.status as any }),
-      },
+      where: { ...(filters?.status && { status: filters.status as any }) },
       include: {
-        user: {
-          select: {
-            name: true,
-            email: true,
-          },
-        },
+        user: { select: { name: true, email: true } },
         items: {
           include: {
             product: {
               include: {
-                supplier: {
-                  select: {
-                    businessName: true,
-                    supplierType: true,
-                  },
-                },
+                supplier: { select: { businessName: true, supplierType: true } },
               },
             },
           },
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     })
-
     return { success: true, orders }
   } catch (error) {
     console.error('Error fetching orders:', error)
@@ -225,22 +160,10 @@ export async function getOrderById(orderId: string) {
       where: { id: orderId },
       include: {
         user: true,
-        items: {
-          include: {
-            product: {
-              include: {
-                supplier: true,
-              },
-            },
-          },
-        },
+        items: { include: { product: { include: { supplier: true } } } },
       },
     })
-
-    if (!order) {
-      return { success: false, error: 'Order not found' }
-    }
-
+    if (!order) return { success: false, error: 'Order not found' }
     return { success: true, order }
   } catch (error) {
     console.error('Error fetching order:', error)
@@ -262,18 +185,9 @@ export async function getAllProducts(filters?: {
         ...(filters?.isApproved !== undefined && { isApproved: filters.isApproved }),
         ...(filters?.supplierId && { supplierId: filters.supplierId }),
       },
-      include: {
-        supplier: {
-          select: {
-            businessName: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      include: { supplier: { select: { businessName: true } } },
+      orderBy: { createdAt: 'desc' },
     })
-
     return { success: true, products }
   } catch (error) {
     console.error('Error fetching products:', error)
@@ -283,11 +197,7 @@ export async function getAllProducts(filters?: {
 
 export async function approveProduct(productId: string) {
   try {
-    await prisma.product.update({
-      where: { id: productId },
-      data: { isApproved: true },
-    })
-
+    await prisma.product.update({ where: { id: productId }, data: { isApproved: true } })
     revalidatePath('/admin/products')
     return { success: true, message: 'Product approved' }
   } catch (error) {
@@ -302,7 +212,6 @@ export async function rejectProduct(productId: string) {
       where: { id: productId },
       data: { isApproved: false, isActive: false },
     })
-
     revalidatePath('/admin/products')
     return { success: true, message: 'Product rejected' }
   } catch (error) {
@@ -315,7 +224,18 @@ export async function rejectProduct(productId: string) {
 // DASHBOARD STATS
 // ============================================
 
-export async function getAdminStats() {
+export interface AdminStats {
+  totalSuppliers: number
+  activeSuppliers: number
+  pendingKYC: number
+  totalOrders: number
+  pendingOrders: number
+  totalProducts: number
+  pendingProducts: number
+  totalRevenue: number  // always a plain number — Decimal serialized here
+}
+
+export async function getAdminStats(): Promise<{ success: true; stats: AdminStats } | { success: false; error: string }> {
   try {
     const [
       totalSuppliers,
@@ -325,7 +245,7 @@ export async function getAdminStats() {
       pendingOrders,
       totalProducts,
       pendingProducts,
-      totalRevenue,
+      revenueAgg,
     ] = await Promise.all([
       prisma.supplier.count(),
       prisma.supplier.count({ where: { isActive: true } }),
@@ -350,7 +270,8 @@ export async function getAdminStats() {
         pendingOrders,
         totalProducts,
         pendingProducts,
-        totalRevenue: totalRevenue._sum.totalAmount || 0,
+        // Convert Decimal → number here so it's safe to pass to Client Components
+        totalRevenue: Number(revenueAgg._sum.totalAmount ?? 0),
       },
     }
   } catch (error) {
