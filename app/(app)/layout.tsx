@@ -1,6 +1,6 @@
 import "../globals.css";
-import Navigation from "@/components/Navbar";
 import { Toaster } from "sonner";
+import ConditionalNav from "@/components/ConditionalNav";
 
 export default function AppLayout({
   children,
@@ -9,7 +9,7 @@ export default function AppLayout({
 }) {
   return (
     <>
-      <Navigation />
+      <ConditionalNav />
       {children}
       <Toaster richColors position="top-right" />
     </>
