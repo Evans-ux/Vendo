@@ -54,25 +54,36 @@ export async function login(email: string, password: string) {
     return { error: 'Login failed' }
   }
 
-  // Check onboarding status and route accordingly
-  try {
-    const dbUser = await prisma.user.findUnique({
-      where: { email: data.user.email! },
-      include: { supplier: true },
-    })
+  // Check onboarding status and route accordingly.
+  // NOTE: redirect() throws internally in Next.js — it must NOT be inside try/catch,
+  // otherwise the catch block swallows it and always sends the user to onboarding.
+  const dbUser = await prisma.user.findUnique({
+    where: { email: data.user.email! },
+    include: { supplier: true },
+  }).catch(() => null)
 
-    if (!dbUser?.supplier || dbUser.supplier.onboardingStep !== 'COMPLETED') {
-      revalidatePath('/supplier/onboard')
-      redirect('/supplier/onboard')
-    }
+  const step = dbUser?.supplier?.onboardingStep
 
-    revalidatePath('/supplier/dashboard')
-    redirect('/supplier/dashboard')
-  } catch (err) {
-    // User not in DB yet — send to onboarding
+  // Send to the correct onboarding step they left off at
+  if (!dbUser || !dbUser.supplier || step === 'NOT_STARTED') {
     revalidatePath('/supplier/onboard')
     redirect('/supplier/onboard')
   }
+
+  if (step === 'PROFILE_COMPLETE') {
+    revalidatePath('/supplier/onboard/kyc')
+    redirect('/supplier/onboard/kyc')
+  }
+
+  if (step === 'KYC_SUBMITTED') {
+    // KYC submitted but not yet approved — send to dashboard (pending state)
+    revalidatePath('/supplier/dashboard')
+    redirect('/supplier/dashboard')
+  }
+
+  // COMPLETED — fully approved supplier
+  revalidatePath('/supplier/dashboard')
+  redirect('/supplier/dashboard')
 }
 
 export async function logout() {
