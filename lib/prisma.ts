@@ -1,20 +1,15 @@
 /**
  * lib/prisma.ts
  *
- * Prisma singleton using the pg connection pool adapter.
+ * Prisma singleton using the pg driver adapter.
  * NEVER import this file in middleware (proxy.ts) or any Edge runtime code.
  * Edge runtime does not support Node.js modules like pg or Prisma's native engine.
  */
-import { Pool } from 'pg'
-import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 
-const connectionString = process.env.DATABASE_URL!
-
-const pool = new Pool({ connectionString })
-
-// @ts-ignore — PrismaPg adapter has a minor type mismatch with the Pool interface
-const adapter = new PrismaPg(pool)
+// PrismaPg v7 accepts a connection string, Pool, or PoolConfig directly
+const adapter = new PrismaPg(process.env.DATABASE_URL!)
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined }
 
