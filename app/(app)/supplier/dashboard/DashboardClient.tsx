@@ -4,7 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { logout } from "@/app/actions/auth";
-import { Badge } from "@/components/ui/badge";
+
+interface Product {
+  id: string;
+  name: string;
+  category: string | null;
+  basePrice: number;
+  sellingPrice: number;
+  imageUrls: string[];
+  stock: number;
+  isApproved: boolean;
+  isActive: boolean;
+}
 
 interface Supplier {
   id: string;
@@ -17,8 +28,9 @@ interface Supplier {
   onboardingStep: string;
   isActive: boolean;
   bio: string | null;
-  termsAcceptedAt: Date | null;
-  createdAt: Date;
+  termsAcceptedAt: string | null;
+  createdAt: string;
+  products: Product[];
 }
 
 interface DashboardClientProps {
@@ -78,11 +90,11 @@ export default function DashboardClient({ supplier, productCount }: DashboardCli
         {/* Welcome */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-bold text-brand-cream">
-              {supplier.businessName}
-            </h2>
+            <h2 className="text-3xl font-bold text-brand-cream">{supplier.businessName}</h2>
             <p className="text-brand-cream/50 mt-1">
-              {supplier.supplierType === "LOCAL" ? "Local Supplier · 2–3 day delivery" : "Dropship Supplier · 14–21 day delivery"}
+              {supplier.supplierType === "LOCAL"
+                ? "Local Supplier · 2–3 day delivery"
+                : "Dropship Supplier · 14–21 day delivery"}
             </p>
           </div>
           <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold border ${kycStyle}`}>
@@ -109,7 +121,8 @@ export default function DashboardClient({ supplier, productCount }: DashboardCli
           <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4">
             <p className="text-sm font-semibold text-yellow-400 mb-1">Verification in Progress</p>
             <p className="text-sm text-yellow-300/80">
-              Your KYC documents are being reviewed. This usually takes 24–48 hours. Your products will go live once approved.
+              Your KYC documents are being reviewed. This usually takes 24–48 hours. Your products
+              will go live once approved.
             </p>
           </div>
         )}
@@ -134,6 +147,42 @@ export default function DashboardClient({ supplier, productCount }: DashboardCli
           ))}
         </div>
 
+        {/* Products preview */}
+        {supplier.products.length > 0 && (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <h3 className="text-lg font-semibold text-brand-cream mb-4">Your Products</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {supplier.products.slice(0, 6).map((product) => (
+                <div key={product.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  {product.imageUrls[0] && (
+                    <img
+                      src={product.imageUrls[0]}
+                      alt={product.name}
+                      className="w-full h-32 object-cover rounded-lg mb-3"
+                    />
+                  )}
+                  <p className="font-medium text-brand-cream text-sm truncate">{product.name}</p>
+                  <p className="text-brand-cream/50 text-xs mt-1">{product.category ?? "—"}</p>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-brand-orange font-semibold text-sm">
+                      ₦{product.sellingPrice.toLocaleString()}
+                    </span>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full ${
+                        product.isApproved
+                          ? "bg-green-500/10 text-green-400"
+                          : "bg-yellow-500/10 text-yellow-400"
+                      }`}
+                    >
+                      {product.isApproved ? "Live" : "Pending"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Business Info */}
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
           <h3 className="text-lg font-semibold text-brand-cream mb-6">Business Details</h3>
@@ -143,18 +192,29 @@ export default function DashboardClient({ supplier, productCount }: DashboardCli
               { label: "Phone", value: supplier.phone },
               { label: "State", value: supplier.state ?? "—" },
               { label: "Supplier Type", value: supplier.supplierType === "LOCAL" ? "Local" : "Dropship" },
-              { label: "Member Since", value: new Date(supplier.createdAt).toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" }) },
+              {
+                label: "Member Since",
+                value: new Date(supplier.createdAt).toLocaleDateString("en-NG", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                }),
+              },
               { label: "Account Status", value: supplier.isActive ? "Active" : "Pending Approval" },
             ].map((item) => (
               <div key={item.label}>
-                <p className="text-xs font-medium text-brand-cream/40 uppercase tracking-wider mb-1">{item.label}</p>
+                <p className="text-xs font-medium text-brand-cream/40 uppercase tracking-wider mb-1">
+                  {item.label}
+                </p>
                 <p className="text-brand-cream font-medium">{item.value}</p>
               </div>
             ))}
           </div>
           {supplier.bio && (
             <div className="mt-6 pt-6 border-t border-white/10">
-              <p className="text-xs font-medium text-brand-cream/40 uppercase tracking-wider mb-2">Store Description</p>
+              <p className="text-xs font-medium text-brand-cream/40 uppercase tracking-wider mb-2">
+                Store Description
+              </p>
               <p className="text-brand-cream/70 text-sm leading-relaxed">{supplier.bio}</p>
             </div>
           )}

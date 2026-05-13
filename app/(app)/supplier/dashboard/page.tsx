@@ -13,7 +13,6 @@ export default async function SupplierDashboardPage() {
     redirect("/auth/login");
   }
 
-  // Get full supplier profile from Prisma
   const dbUser = await prisma.user.findUnique({
     where: { email: user.email! },
     include: {
@@ -23,10 +22,51 @@ export default async function SupplierDashboardPage() {
     },
   });
 
-  // If no supplier profile yet, send them to onboarding
   if (!dbUser?.supplier) {
     redirect("/supplier/onboard");
   }
 
-  return <DashboardClient supplier={dbUser.supplier} productCount={dbUser.supplier.products.length} />;
+  const s = dbUser.supplier;
+
+  // Serialize — Prisma Decimal and Date objects cannot cross the Server→Client boundary
+  const supplier = {
+    id: s.id,
+    userId: s.userId,
+    businessName: s.businessName,
+    phone: s.phone,
+    address: s.address,
+    state: s.state,
+    supplierType: s.supplierType,
+    kycStatus: s.kycStatus,
+    kycDocType: s.kycDocType,
+    kycRejectionReason: s.kycRejectionReason,
+    kycSubmittedAt: s.kycSubmittedAt?.toISOString() ?? null,
+    kycReviewedAt: s.kycReviewedAt?.toISOString() ?? null,
+    onboardingStep: s.onboardingStep,
+    logoUrl: s.logoUrl,
+    storeBannerUrl: s.storeBannerUrl,
+    bio: s.bio,
+    isActive: s.isActive,
+    termsAcceptedAt: s.termsAcceptedAt?.toISOString() ?? null,
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
+    products: s.products.map((p) => ({
+      id: p.id,
+      supplierId: p.supplierId,
+      name: p.name,
+      description: p.description,
+      category: p.category,
+      basePrice: Number(p.basePrice),
+      sellingPrice: Number(p.sellingPrice),
+      imageUrls: p.imageUrls,
+      sizes: p.sizes,
+      stock: p.stock,
+      isApproved: p.isApproved,
+      isActive: p.isActive,
+      createdAt: p.createdAt.toISOString(),
+      updatedAt: p.updatedAt.toISOString(),
+    })),
+  };
+
+  return <DashboardClient supplier={supplier} productCount={supplier.products.length} />;
 }
