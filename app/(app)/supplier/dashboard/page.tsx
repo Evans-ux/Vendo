@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
-import type { Product } from "@prisma/client";
 import DashboardClient from "./DashboardClient";
 
 export default async function SupplierDashboardPage() {
@@ -37,13 +36,13 @@ export default async function SupplierDashboardPage() {
     phone: s.phone,
     address: s.address,
     state: s.state,
-    supplierType: s.supplierType,
-    kycStatus: s.kycStatus,
+    supplierType: s.supplierType as string,
+    kycStatus: s.kycStatus as string,
     kycDocType: s.kycDocType,
     kycRejectionReason: s.kycRejectionReason,
     kycSubmittedAt: s.kycSubmittedAt?.toISOString() ?? null,
     kycReviewedAt: s.kycReviewedAt?.toISOString() ?? null,
-    onboardingStep: s.onboardingStep,
+    onboardingStep: s.onboardingStep as string,
     logoUrl: s.logoUrl,
     storeBannerUrl: s.storeBannerUrl,
     bio: s.bio,
@@ -51,7 +50,7 @@ export default async function SupplierDashboardPage() {
     termsAcceptedAt: s.termsAcceptedAt?.toISOString() ?? null,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
-    products: s.products.map((p: Product) => ({
+    products: s.products.map((p) => ({
       id: p.id,
       supplierId: p.supplierId,
       name: p.name,
