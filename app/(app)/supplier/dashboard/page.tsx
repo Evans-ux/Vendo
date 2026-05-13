@@ -28,6 +28,9 @@ export default async function SupplierDashboardPage() {
 
   const s = dbUser.supplier;
 
+  // Infer the product type directly from the Prisma result
+  type PrismaProduct = (typeof s.products)[number];
+
   // Serialize — Prisma Decimal and Date objects cannot cross the Server→Client boundary
   const supplier = {
     id: s.id,
@@ -50,7 +53,7 @@ export default async function SupplierDashboardPage() {
     termsAcceptedAt: s.termsAcceptedAt?.toISOString() ?? null,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
-    products: s.products.map((p) => ({
+    products: s.products.map((p: PrismaProduct) => ({
       id: p.id,
       supplierId: p.supplierId,
       name: p.name,
