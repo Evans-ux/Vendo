@@ -19,8 +19,12 @@ export default async function SupplierOnboardingStep2() {
   // Guard: must have completed step 1 first
   if (!dbUser?.supplier || step === 'NOT_STARTED') redirect("/supplier/onboard")
 
+    if (step === 'TERMS_ACCEPTED' || step === "COMPLETED") redirect ("/supplier/dashboard")
+    if (step === 'FIRST_PRODUCT') redirect("/supplier/onboard/terms")
   // Guard: already past this step
-  if (step === 'KYC_SUBMITTED' || step === 'COMPLETED') redirect("/supplier/dashboard")
+    if (step === 'KYC_SUBMITTED') redirect("/supplier/onboard/product")
+    if (step === 'PROFILE_COMPLETE') redirect("/supplier/onboard/kyc")
+    
 
   return <KycStep2Client />
 }

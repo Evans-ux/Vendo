@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import prisma from "@/lib/prisma"
-import ProductStep3Client from "./ProductStep3Client"
+import TermsAndConditions from "./TermsAndConditions"
 
-export default async function SupplierOnboardingStep3() {
+export default async function SupplierTermsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -16,14 +16,14 @@ export default async function SupplierOnboardingStep3() {
 
   const step = dbUser?.supplier?.onboardingStep
 
-  // Guard: must have submitted KYC first
+  // Guard: must have at least submitted KYC to reach terms
   if (!dbUser?.supplier || step === 'NOT_STARTED') redirect("/supplier/onboard")
   if (step === 'PROFILE_COMPLETE') redirect("/supplier/onboard/kyc")
+  if (step === 'KYC_SUBMITTED') redirect("/supplier/onboard/products")
 
-  // Guard: already past this step — products are optional so FIRST_PRODUCT also moves forward
+  // Guard: already accepted terms
   if (step === 'TERMS_ACCEPTED' || step === 'COMPLETED') redirect("/supplier/dashboard")
-  if (step === 'FIRST_PRODUCT') redirect("/supplier/onboard/terms")
 
-  // step === 'KYC_SUBMITTED' — show the product form
-  return <ProductStep3Client />
+  // step === 'FIRST_PRODUCT' (or KYC_SUBMITTED skipped products) — show terms
+  return <TermsAndConditions />
 }

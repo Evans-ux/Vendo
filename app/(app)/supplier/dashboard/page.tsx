@@ -26,6 +26,17 @@ export default async function SupplierDashboardPage() {
     redirect("/supplier/onboard");
   }
 
+  // Supplier must have accepted terms to access the dashboard
+  const step = dbUser.supplier.onboardingStep
+  if (step !== 'TERMS_ACCEPTED' && step !== 'COMPLETED') {
+    // Route them to wherever they left off
+    if (step === 'NOT_STARTED') redirect("/supplier/onboard")
+    if (step === 'PROFILE_COMPLETE') redirect("/supplier/onboard/kyc")
+    if (step === 'KYC_SUBMITTED') redirect("/supplier/onboard/products")
+    if (step === 'FIRST_PRODUCT') redirect("/supplier/onboard/terms")
+    redirect("/supplier/onboard")
+  }
+
   const s = dbUser.supplier;
 
   // Infer the product type directly from the Prisma result

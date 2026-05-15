@@ -62,12 +62,33 @@ export async function login(email: string, password: string) {
     include: { supplier: true },
   }).catch(() => null)
 
+  // Admins go straight to their dashboard — they have no supplier profile
+  if (dbUser?.role === 'ADMIN') {
+    revalidatePath('/admin/dashboard')
+    redirect('/admin/dashboard')
+  }
+
   const step = dbUser?.supplier?.onboardingStep
 
-  // Send to the correct onboarding step they left off at
+  // Route to the correct step they left off at
   if (!dbUser || !dbUser.supplier || step === 'NOT_STARTED') {
     revalidatePath('/supplier/onboard')
     redirect('/supplier/onboard')
+  }
+
+  if (step === 'TERMS_ACCEPTED' || step === 'COMPLETED') {
+    revalidatePath('/supplier/dashboard')
+    redirect('/supplier/dashboard')
+  }
+
+  if (step === 'FIRST_PRODUCT') {
+    revalidatePath('/supplier/onboard/terms')
+    redirect('/supplier/onboard/terms')
+  }
+
+  if (step === 'KYC_SUBMITTED') {
+    revalidatePath('/supplier/onboard/products')
+    redirect('/supplier/onboard/products')
   }
 
   if (step === 'PROFILE_COMPLETE') {
@@ -75,13 +96,7 @@ export async function login(email: string, password: string) {
     redirect('/supplier/onboard/kyc')
   }
 
-  if (step === 'KYC_SUBMITTED') {
-    // KYC submitted but not yet approved — send to dashboard (pending state)
-    revalidatePath('/supplier/dashboard')
-    redirect('/supplier/dashboard')
-  }
-
-  // COMPLETED — fully approved supplier
+  // Fallback
   revalidatePath('/supplier/dashboard')
   redirect('/supplier/dashboard')
 }

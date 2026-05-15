@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     // Timestamp the acceptance for legal audit trail
     await prisma.supplier.update({
       where: { id: dbUser.supplier.id },
-      data: { termsAcceptedAt: new Date() },
+      data: { termsAcceptedAt: new Date() , onboardingStep: "TERMS_ACCEPTED" },
     });
 
     return NextResponse.json({ message: "Terms accepted successfully", success: true });

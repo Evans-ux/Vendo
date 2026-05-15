@@ -117,7 +117,7 @@ export default function HeroSection({ isLoggedIn = false }: HeroSectionProps) {
             </AnimatePresence>
           </span>
           <br />
-          on Telegram &amp; WhatsApp
+          on <span className="text-[#2aabee]">Telegram</span> &amp; <span className="text-[#25d366]">WhatsApp</span>
         </motion.h1>
 
         {/* Subheadline */}

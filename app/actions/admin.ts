@@ -83,6 +83,7 @@ export async function getPendingKYC() {
 
 export async function approveKYC(supplierId: string) {
   try {
+    // Approve the supplier and activate their account
     await prisma.supplier.update({
       where: { id: supplierId },
       data: {
@@ -92,6 +93,14 @@ export async function approveKYC(supplierId: string) {
         onboardingStep: 'COMPLETED',
       },
     })
+
+    // Approve all products this supplier has uploaded
+    await prisma.product.updateMany({
+      where: { supplierId },
+      data: { isApproved: true },
+    })
+
+    // Upgrade the user's role to SUPPLIER
     const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } })
     if (supplier) {
       await prisma.user.update({
@@ -99,8 +108,9 @@ export async function approveKYC(supplierId: string) {
         data: { role: 'SUPPLIER' },
       })
     }
+
     revalidatePath('/admin/kyc')
-    return { success: true, message: 'KYC approved successfully' }
+    return { success: true, message: 'Supplier verified and all products approved.' }
   } catch (error) {
     console.error('Error approving KYC:', error)
     return { success: false, error: 'Failed to approve KYC' }

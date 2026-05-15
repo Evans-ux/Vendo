@@ -91,7 +91,7 @@ export default function KycStep2Client() {
       }
 
       toast.success("Document uploaded! Taking you to your dashboard.", { id: toastId });
-      router.push("/supplier/dashboard");
+      router.push("/supplier/onboard/terms");
     } catch {
       toast.error("Network error. Please check your connection and try again.", { id: toastId });
     }

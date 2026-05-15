@@ -17,7 +17,9 @@ export default async function SupplierOnboardingStep1() {
   const step = dbUser?.supplier?.onboardingStep
 
   // Resume from where they left off — don't restart them at step 1
-  if (step === 'KYC_SUBMITTED' || step === 'COMPLETED') redirect("/supplier/dashboard")
+  if (step === 'TERMS_ACCEPTED' || step === "COMPLETED") redirect ("/supplier/dashboard")
+  if (step === 'FIRST_PRODUCT') redirect("/supplier/onboard/terms")
+  if (step === 'KYC_SUBMITTED') redirect("/supplier/onboard/product")
   if (step === 'PROFILE_COMPLETE') redirect("/supplier/onboard/kyc")
 
   return <OnboardingStep1Client />

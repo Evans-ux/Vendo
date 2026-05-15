@@ -1,4 +1,4 @@
-"use client";
+/*"use client";
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -27,7 +27,7 @@ export default function NavbarClient({ isLoggedIn }: NavbarClientProps) {
       }`}
     >
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-        {/* Logo */}
+        {/* Logo }
         <Link href="/" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-brand-orange flex items-center justify-center">
             <span className="text-white font-black text-sm">V</span>
@@ -35,14 +35,14 @@ export default function NavbarClient({ isLoggedIn }: NavbarClientProps) {
           <span className="text-brand-cream font-bold text-lg">Vendo</span>
         </Link>
 
-        {/* Desktop nav links */}
+        {/* Desktop nav links }
         <nav className="hidden md:flex items-center gap-8 text-sm text-brand-cream/60">
           <a href="#how-it-works" className="hover:text-brand-cream transition-colors">How it Works</a>
           <a href="#features" className="hover:text-brand-cream transition-colors">Features</a>
           <a href="#suppliers" className="hover:text-brand-cream transition-colors">For Suppliers</a>
         </nav>
 
-        {/* Desktop CTAs */}
+        {/* Desktop CTAs }
         <div className="hidden md:flex items-center gap-3">
           {isLoggedIn ? (
             <Link
@@ -72,7 +72,7 @@ export default function NavbarClient({ isLoggedIn }: NavbarClientProps) {
           )}
         </div>
 
-        {/* Mobile menu button */}
+        {/* Mobile menu button }
         <button
           className="md:hidden text-brand-cream/70 hover:text-brand-cream"
           onClick={() => setMenuOpen(!menuOpen)}
@@ -87,7 +87,7 @@ export default function NavbarClient({ isLoggedIn }: NavbarClientProps) {
         </button>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile menu }
       <AnimatePresence>
         {menuOpen && (
           <motion.div
@@ -127,4 +127,4 @@ export default function NavbarClient({ isLoggedIn }: NavbarClientProps) {
       </AnimatePresence>
     </header>
   );
-}
+}*/
