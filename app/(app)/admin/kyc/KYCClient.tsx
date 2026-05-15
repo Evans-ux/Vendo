@@ -160,80 +160,159 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
             {/* Document Viewer */}
             <div className="lg:sticky lg:top-24 lg:self-start">
               {selectedSupplier ? (
-                <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900 mb-1">
+                <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6 max-h-[calc(100vh-120px)] overflow-y-auto">
+                  {/* Header */}
+                  <div className="border-b border-gray-200 pb-4">
+                    <h2 className="text-xl font-bold text-gray-900 mb-1">
                       {selectedSupplier.businessName}
                     </h2>
                     <p className="text-sm text-gray-500">{selectedSupplier.user.email}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Submitted on{" "}
+                      {selectedSupplier.kycSubmittedAt
+                        ? new Date(selectedSupplier.kycSubmittedAt).toLocaleDateString("en-NG", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "N/A"}
+                    </p>
                   </div>
 
-                  {/* Document */}
+                  {/* Owner Information */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                      KYC Document ({selectedSupplier.kycDocType || "Unknown"})
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      👤 Owner Information
                     </h3>
-                    {selectedSupplier.kycDocUrl ? (
-                      <div className="border border-gray-200 rounded-lg overflow-hidden">
-                        {selectedSupplier.kycDocUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                          <img
-                            src={selectedSupplier.kycDocUrl}
-                            alt="KYC Document"
-                            className="w-full h-auto"
-                          />
-                        ) : (
-                          <div className="p-8 text-center">
-                            <p className="text-gray-500 mb-4">
-                              Document preview not available
-                            </p>
-                            <a
-                              href={selectedSupplier.kycDocUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                              📄 Open Document
-                            </a>
-                          </div>
-                        )}
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Full Name:</span>
+                        <span className="font-medium text-gray-900">
+                          {selectedSupplier.user.name}
+                        </span>
                       </div>
-                    ) : (
-                      <p className="text-sm text-gray-500">No document uploaded</p>
-                    )}
-                  </div>
-
-                  {/* Business Details */}
-                  <div className="border-t border-gray-200 pt-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                      Business Details
-                    </h3>
-                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Email:</span>
+                        <span className="font-medium text-gray-900">
+                          {selectedSupplier.user.email}
+                        </span>
+                      </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">Phone:</span>
                         <span className="font-medium text-gray-900">
                           {selectedSupplier.phone}
                         </span>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Business Information */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      🏢 Business Information
+                    </h3>
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">State:</span>
+                        <span className="text-gray-500">Business Name:</span>
                         <span className="font-medium text-gray-900">
-                          {selectedSupplier.state || "N/A"}
+                          {selectedSupplier.businessName}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Type:</span>
+                        <span className="text-gray-500">Supplier Type:</span>
                         <span className="font-medium text-gray-900">
-                          {selectedSupplier.supplierType === "LOCAL" ? "Local" : "Dropship"}
+                          {selectedSupplier.supplierType === "LOCAL" ? "🚚 Local (2-3 days)" : "✈️ Dropship (14-21 days)"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">State:</span>
+                        <span className="font-medium text-gray-900">
+                          {selectedSupplier.state || "Not provided"}
                         </span>
                       </div>
                       {selectedSupplier.address && (
                         <div>
-                          <span className="text-gray-500">Address:</span>
-                          <p className="font-medium text-gray-900 mt-1">
+                          <span className="text-gray-500 block mb-1">Business Address:</span>
+                          <p className="font-medium text-gray-900 bg-white rounded p-2">
                             {selectedSupplier.address}
                           </p>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* KYC Document */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      📄 KYC Document
+                    </h3>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                      <p className="text-xs text-blue-700">
+                        <strong>Document Type:</strong> {selectedSupplier.kycDocType || "Not specified"}
+                      </p>
+                    </div>
+                    {selectedSupplier.kycDocUrl ? (
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        {selectedSupplier.kycDocUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                          <img
+                            src={selectedSupplier.kycDocUrl}
+                            alt="KYC Document"
+                            className="w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => window.open(selectedSupplier.kycDocUrl!, "_blank")}
+                          />
+                        ) : (
+                          <div className="p-8 text-center bg-gray-50">
+                            <div className="text-4xl mb-3">📄</div>
+                            <p className="text-gray-500 mb-4 text-sm">
+                              Document preview not available
+                            </p>
+                            <a
+                              href={selectedSupplier.kycDocUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                            >
+                              📥 Download & View Document
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                        <p className="text-sm text-red-600">⚠️ No document uploaded</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Verification Checklist */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      ✓ Verification Checklist
+                    </h3>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-2 text-sm">
+                      <p className="font-semibold text-yellow-900 mb-2">Please verify:</p>
+                      <label className="flex items-start gap-2 text-yellow-800">
+                        <input type="checkbox" className="mt-1" />
+                        <span>Business name matches KYC document</span>
+                      </label>
+                      <label className="flex items-start gap-2 text-yellow-800">
+                        <input type="checkbox" className="mt-1" />
+                        <span>Owner name matches KYC document</span>
+                      </label>
+                      <label className="flex items-start gap-2 text-yellow-800">
+                        <input type="checkbox" className="mt-1" />
+                        <span>Contact information is valid</span>
+                      </label>
+                      <label className="flex items-start gap-2 text-yellow-800">
+                        <input type="checkbox" className="mt-1" />
+                        <span>Document is clear and readable</span>
+                      </label>
+                      <label className="flex items-start gap-2 text-yellow-800">
+                        <input type="checkbox" className="mt-1" />
+                        <span>All required information provided</span>
+                      </label>
                     </div>
                   </div>
 
@@ -242,25 +321,28 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
                     <button
                       onClick={() => handleApprove(selectedSupplier.id)}
                       disabled={processing}
-                      className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                      className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      {processing ? "Processing..." : "✓ Approve KYC"}
+                      {processing ? "Processing..." : "✓ Approve & Activate Supplier"}
                     </button>
 
                     <div className="space-y-2">
+                      <label className="text-xs font-semibold text-gray-700 block">
+                        Rejection Reason (required):
+                      </label>
                       <textarea
                         value={rejectionReason}
                         onChange={(e) => setRejectionReason(e.target.value)}
-                        placeholder="Reason for rejection (required)"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
-                        rows={3}
+                        placeholder="Explain why this supplier is being rejected (e.g., unclear documents, missing information, invalid business details)"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none text-sm"
+                        rows={4}
                       />
                       <button
                         onClick={() => handleReject(selectedSupplier.id)}
                         disabled={processing || !rejectionReason.trim()}
-                        className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                        className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                       >
-                        {processing ? "Processing..." : "✗ Reject KYC"}
+                        {processing ? "Processing..." : "✗ Reject Supplier"}
                       </button>
                     </div>
                   </div>

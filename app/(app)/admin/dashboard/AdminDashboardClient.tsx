@@ -151,21 +151,23 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
 
         {/* Alerts */}
         {stats.pendingKYC > 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">⚠️</span>
+          <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-5 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                <span className="text-2xl">⚠️</span>
+              </div>
               <div className="flex-1">
-                <h3 className="font-semibold text-yellow-900 mb-1">
-                  {stats.pendingKYC} KYC Verification{stats.pendingKYC > 1 ? "s" : ""} Pending
+                <h3 className="font-bold text-yellow-900 text-lg mb-2">
+                  {stats.pendingKYC} New Supplier{stats.pendingKYC > 1 ? "s" : ""} Awaiting Verification
                 </h3>
-                <p className="text-sm text-yellow-700 mb-3">
-                  Suppliers are waiting for their documents to be reviewed.
+                <p className="text-sm text-yellow-800 mb-3">
+                  Review their onboarding information, business details, and KYC documents before approving.
                 </p>
                 <button
                   onClick={() => router.push("/admin/kyc")}
-                  className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-medium rounded-lg transition-colors"
+                  className="px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
                 >
-                  Review Now →
+                  Review Suppliers Now →
                 </button>
               </div>
             </div>
