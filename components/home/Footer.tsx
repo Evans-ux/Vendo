@@ -56,7 +56,7 @@ export default function Footer() {
               <li><a href="#" className="hover:text-brand-orange transition-colors">About Vendo</a></li>
               <li><a href="#" className="hover:text-brand-orange transition-colors">How it Works</a></li>
               <li><a href="#" className="hover:text-brand-orange transition-colors">Privacy Policy</a></li>
-              <li><a href="#" className="hover:text-brand-orange transition-colors">Terms of Service</a></li>
+              <li><a href="/terms" className="hover:text-brand-orange transition-colors">Terms of Service</a></li>
             </ul>
           </div>
         </div>

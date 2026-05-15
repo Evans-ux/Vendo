@@ -18,350 +18,303 @@ interface Supplier {
   kycSubmittedAt: string | null;
   onboardingStep: string;
   bio: string | null;
-  logoUrl: string | null;
-  storeBannerUrl: string | null;
-  termsAcceptedAt: string | null;
-  createdAt: string | null;
-  user: {
-    name: string;
-    email: string;
-  };
+  user: { name: string; email: string };
 }
 
+type ConfirmAction = { type: "approve"; supplierId: string } | { type: "reject"; supplierId: string; reason: string } | null;
+
+// ── Inline confirmation modal — no browser confirm() ──────────────────────────
+function ConfirmModal({
+  action,
+  onConfirm,
+  onCancel,
+  processing,
+}: {
+  action: ConfirmAction;
+  onConfirm: () => void;
+  onCancel: () => void;
+  processing: boolean;
+}) {
+  if (!action) return null;
+
+  const isApprove = action.type === "approve";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+
+      {/* Modal */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10">
+        {/* Icon */}
+        <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 ${
+          isApprove ? "bg-green-100" : "bg-red-100"
+        }`}>
+          <span className="text-2xl">{isApprove ? "✓" : "✗"}</span>
+        </div>
+
+        <h3 className="text-lg font-bold text-gray-900 text-center mb-2">
+          {isApprove ? "Approve this supplier?" : "Reject this supplier?"}
+        </h3>
+
+        <p className="text-sm text-gray-500 text-center mb-6">
+          {isApprove
+            ? "This will verify their identity, activate their account, and approve all their uploaded products."
+            : `Their account will remain inactive. They'll see your reason and can re-submit.`}
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={processing}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={processing}
+            className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
+              isApprove
+                ? "bg-green-600 hover:bg-green-700"
+                : "bg-red-600 hover:bg-red-700"
+            }`}
+          >
+            {processing ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                {isApprove ? "Approving..." : "Rejecting..."}
+              </span>
+            ) : isApprove ? "Yes, approve" : "Yes, reject"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
   const router = useRouter();
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [selected, setSelected] = useState<Supplier | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [pendingAction, setPendingAction] = useState<ConfirmAction>(null);
 
-  const handleApprove = async (supplierId: string) => {
-    if (!confirm("Are you sure you want to approve this supplier's KYC?")) return;
-
-    setProcessing(true);
-    const result = await approveKYC(supplierId);
-
-    if (result.success) {
-      toast.success("KYC Approved", {
-        description: result.message,
-      });
-      setSelectedSupplier(null);
-      router.refresh();
-    } else {
-      toast.error("Failed to approve KYC", {
-        description: result.error,
-      });
-    }
-    setProcessing(false);
+  const confirmApprove = (supplierId: string) => {
+    setPendingAction({ type: "approve", supplierId });
   };
 
-  const handleReject = async (supplierId: string) => {
+  const confirmReject = (supplierId: string) => {
     if (!rejectionReason.trim()) {
-      toast.error("Please provide a rejection reason");
+      toast.error("Please enter a rejection reason before rejecting.");
       return;
     }
+    setPendingAction({ type: "reject", supplierId, reason: rejectionReason });
+  };
 
-    if (!confirm("Are you sure you want to reject this supplier's KYC?")) return;
-
+  const handleConfirm = async () => {
+    if (!pendingAction) return;
     setProcessing(true);
-    const result = await rejectKYC(supplierId, rejectionReason);
 
-    if (result.success) {
-      toast.success("KYC Rejected", {
-        description: result.message,
-      });
-      setSelectedSupplier(null);
-      setRejectionReason("");
-      router.refresh();
+    if (pendingAction.type === "approve") {
+      const result = await approveKYC(pendingAction.supplierId);
+      if (result.success) {
+        toast.success("Supplier approved", { description: result.message });
+        setSelected(null);
+        router.refresh();
+      } else {
+        toast.error("Approval failed", { description: result.error });
+      }
     } else {
-      toast.error("Failed to reject KYC", {
-        description: result.error,
-      });
+      const result = await rejectKYC(pendingAction.supplierId, pendingAction.reason);
+      if (result.success) {
+        toast.error("Supplier rejected", {
+          description: "They have been notified with your reason.",
+        });
+        setSelected(null);
+        setRejectionReason("");
+        router.refresh();
+      } else {
+        toast.error("Rejection failed", { description: result.error });
+      }
     }
+
     setProcessing(false);
+    setPendingAction(null);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+    <>
+      <ConfirmModal
+        action={pendingAction}
+        onConfirm={handleConfirm}
+        onCancel={() => setPendingAction(null)}
+        processing={processing}
+      />
+
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">KYC Verification</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Review and verify supplier documents
-              </p>
+              <p className="text-sm text-gray-500 mt-0.5">Review and verify supplier documents</p>
             </div>
             <button
               onClick={() => router.push("/admin/dashboard")}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
             >
-              ← Back to Dashboard
+              ← Dashboard
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {suppliers.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <div className="text-6xl mb-4">✓</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">All caught up!</h3>
-            <p className="text-gray-500">No pending KYC verifications at the moment.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Suppliers List */}
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Pending Verifications ({suppliers.length})
-              </h2>
-              {suppliers.map((supplier) => (
-                <button
-                  key={supplier.id}
-                  onClick={() => setSelectedSupplier(supplier)}
-                  className={`w-full text-left bg-white rounded-xl border p-4 transition-all ${
-                    selectedSupplier?.id === supplier.id
-                      ? "border-blue-500 shadow-lg"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{supplier.businessName}</h3>
-                      <p className="text-sm text-gray-500">{supplier.user.name}</p>
-                    </div>
-                    <span className="px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
-                      Pending
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-600 space-y-1">
-                    <p>📧 {supplier.user.email}</p>
-                    <p>📱 {supplier.phone}</p>
-                    <p>
-                      📍 {supplier.state || "N/A"} •{" "}
-                      {supplier.supplierType === "LOCAL" ? "Local" : "Dropship"}
-                    </p>
-                    {supplier.kycSubmittedAt && (
-                      <p className="text-xs text-gray-500">
-                        Submitted{" "}
-                        {new Date(supplier.kycSubmittedAt).toLocaleDateString("en-NG", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </p>
-                    )}
-                  </div>
-                </button>
-              ))}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {suppliers.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-200 p-16 text-center">
+              <div className="text-6xl mb-4">🎉</div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">All caught up!</h3>
+              <p className="text-gray-500">No pending KYC verifications right now.</p>
             </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            {/* Document Viewer */}
-            <div className="lg:sticky lg:top-24 lg:self-start">
-              {selectedSupplier ? (
-                <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6 max-h-[calc(100vh-120px)] overflow-y-auto">
-                  {/* Header */}
-                  <div className="border-b border-gray-200 pb-4">
-                    <h2 className="text-xl font-bold text-gray-900 mb-1">
-                      {selectedSupplier.businessName}
-                    </h2>
-                    <p className="text-sm text-gray-500">{selectedSupplier.user.email}</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Submitted on{" "}
-                      {selectedSupplier.kycSubmittedAt
-                        ? new Date(selectedSupplier.kycSubmittedAt).toLocaleDateString("en-NG", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        : "N/A"}
-                    </p>
-                  </div>
-
-                  {/* Owner Information */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      👤 Owner Information
-                    </h3>
-                    <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Full Name:</span>
-                        <span className="font-medium text-gray-900">
-                          {selectedSupplier.user.name}
-                        </span>
+              {/* ── Supplier list ── */}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                  Pending · {suppliers.length}
+                </p>
+                {suppliers.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => { setSelected(s); setRejectionReason(""); }}
+                    className={`w-full text-left bg-white rounded-xl border p-4 transition-all ${
+                      selected?.id === s.id
+                        ? "border-orange-400 shadow-md ring-1 ring-orange-400/30"
+                        : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="font-semibold text-gray-900">{s.businessName}</p>
+                        <p className="text-sm text-gray-500">{s.user.name}</p>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Email:</span>
-                        <span className="font-medium text-gray-900">
-                          {selectedSupplier.user.email}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Phone:</span>
-                        <span className="font-medium text-gray-900">
-                          {selectedSupplier.phone}
-                        </span>
-                      </div>
+                      <span className="px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
+                        Pending
+                      </span>
                     </div>
-                  </div>
-
-                  {/* Business Information */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      🏢 Business Information
-                    </h3>
-                    <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Business Name:</span>
-                        <span className="font-medium text-gray-900">
-                          {selectedSupplier.businessName}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Supplier Type:</span>
-                        <span className="font-medium text-gray-900">
-                          {selectedSupplier.supplierType === "LOCAL" ? "🚚 Local (2-3 days)" : "✈️ Dropship (14-21 days)"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">State:</span>
-                        <span className="font-medium text-gray-900">
-                          {selectedSupplier.state || "Not provided"}
-                        </span>
-                      </div>
-                      {selectedSupplier.address && (
-                        <div>
-                          <span className="text-gray-500 block mb-1">Business Address:</span>
-                          <p className="font-medium text-gray-900 bg-white rounded p-2">
-                            {selectedSupplier.address}
-                          </p>
-                        </div>
+                    <div className="text-sm text-gray-500 space-y-0.5">
+                      <p>📧 {s.user.email}</p>
+                      <p>📱 {s.phone}</p>
+                      <p>📍 {s.state || "N/A"} · {s.supplierType === "LOCAL" ? "Local" : "Dropship"}</p>
+                      {s.kycSubmittedAt && (
+                        <p className="text-xs text-gray-400 pt-1">
+                          Submitted {new Date(s.kycSubmittedAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
                       )}
                     </div>
-                  </div>
+                  </button>
+                ))}
+              </div>
 
-                  {/* KYC Document */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      📄 KYC Document
-                    </h3>
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                      <p className="text-xs text-blue-700">
-                        <strong>Document Type:</strong> {selectedSupplier.kycDocType || "Not specified"}
-                      </p>
+              {/* ── Document viewer + actions ── */}
+              <div className="lg:sticky lg:top-24 lg:self-start">
+                {selected ? (
+                  <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                    {/* Supplier header */}
+                    <div className="px-6 py-4 border-b border-gray-100">
+                      <p className="font-semibold text-gray-900">{selected.businessName}</p>
+                      <p className="text-sm text-gray-500">{selected.user.email}</p>
                     </div>
-                    {selectedSupplier.kycDocUrl ? (
-                      <div className="border border-gray-200 rounded-lg overflow-hidden">
-                        {selectedSupplier.kycDocUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+
+                    {/* Document */}
+                    <div className="px-6 py-4 border-b border-gray-100">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                        {selected.kycDocType || "Document"}
+                      </p>
+                      {selected.kycDocUrl ? (
+                        selected.kycDocUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
                           <img
-                            src={selectedSupplier.kycDocUrl}
+                            src={selected.kycDocUrl}
                             alt="KYC Document"
-                            className="w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-                            onClick={() => window.open(selectedSupplier.kycDocUrl!, "_blank")}
+                            className="w-full rounded-lg border border-gray-100"
                           />
                         ) : (
-                          <div className="p-8 text-center bg-gray-50">
-                            <div className="text-4xl mb-3">📄</div>
-                            <p className="text-gray-500 mb-4 text-sm">
-                              Document preview not available
-                            </p>
+                          <div className="bg-gray-50 rounded-xl p-8 text-center border border-gray-200">
+                            <p className="text-4xl mb-3">📄</p>
+                            <p className="text-sm text-gray-500 mb-4">Preview not available for this file type</p>
                             <a
-                              href={selectedSupplier.kycDocUrl}
+                              href={selected.kycDocUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
                             >
-                              📥 Download & View Document
+                              Open document ↗
                             </a>
                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
-                        <p className="text-sm text-red-600">⚠️ No document uploaded</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Verification Checklist */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      ✓ Verification Checklist
-                    </h3>
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-2 text-sm">
-                      <p className="font-semibold text-yellow-900 mb-2">Please verify:</p>
-                      <label className="flex items-start gap-2 text-yellow-800">
-                        <input type="checkbox" className="mt-1" />
-                        <span>Business name matches KYC document</span>
-                      </label>
-                      <label className="flex items-start gap-2 text-yellow-800">
-                        <input type="checkbox" className="mt-1" />
-                        <span>Owner name matches KYC document</span>
-                      </label>
-                      <label className="flex items-start gap-2 text-yellow-800">
-                        <input type="checkbox" className="mt-1" />
-                        <span>Contact information is valid</span>
-                      </label>
-                      <label className="flex items-start gap-2 text-yellow-800">
-                        <input type="checkbox" className="mt-1" />
-                        <span>Document is clear and readable</span>
-                      </label>
-                      <label className="flex items-start gap-2 text-yellow-800">
-                        <input type="checkbox" className="mt-1" />
-                        <span>All required information provided</span>
-                      </label>
+                        )
+                      ) : (
+                        <p className="text-sm text-gray-400 italic">No document uploaded</p>
+                      )}
                     </div>
-                  </div>
 
-                  {/* Actions */}
-                  <div className="border-t border-gray-200 pt-4 space-y-3">
-                    <button
-                      onClick={() => handleApprove(selectedSupplier.id)}
-                      disabled={processing}
-                      className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {processing ? "Processing..." : "✓ Approve & Activate Supplier"}
-                    </button>
+                    {/* Business details */}
+                    <div className="px-6 py-4 border-b border-gray-100 grid grid-cols-2 gap-3 text-sm">
+                      {[
+                        ["Phone", selected.phone],
+                        ["State", selected.state || "N/A"],
+                        ["Type", selected.supplierType === "LOCAL" ? "Local" : "Dropship"],
+                        ["Address", selected.address || "N/A"],
+                      ].map(([label, value]) => (
+                        <div key={label}>
+                          <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+                          <p className="font-medium text-gray-900">{value}</p>
+                        </div>
+                      ))}
+                    </div>
 
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-gray-700 block">
-                        Rejection Reason (required):
-                      </label>
-                      <textarea
-                        value={rejectionReason}
-                        onChange={(e) => setRejectionReason(e.target.value)}
-                        placeholder="Explain why this supplier is being rejected (e.g., unclear documents, missing information, invalid business details)"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none text-sm"
-                        rows={4}
-                      />
+                    {/* Actions */}
+                    <div className="px-6 py-5 space-y-3">
                       <button
-                        onClick={() => handleReject(selectedSupplier.id)}
-                        disabled={processing || !rejectionReason.trim()}
-                        className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        onClick={() => confirmApprove(selected.id)}
+                        disabled={processing}
+                        className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
                       >
-                        {processing ? "Processing..." : "✗ Reject Supplier"}
+                        ✓ Approve Supplier
                       </button>
+
+                      <div className="space-y-2">
+                        <textarea
+                          value={rejectionReason}
+                          onChange={(e) => setRejectionReason(e.target.value)}
+                          placeholder="Rejection reason — the supplier will see this message"
+                          className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-transparent resize-none outline-none transition"
+                          rows={3}
+                        />
+                        <button
+                          onClick={() => confirmReject(selected.id)}
+                          disabled={processing || !rejectionReason.trim()}
+                          className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-40"
+                        >
+                          ✗ Reject Supplier
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                  <div className="text-6xl mb-4">👈</div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                    Select a supplier
-                  </h3>
-                  <p className="text-gray-500">
-                    Choose a supplier from the list to review their KYC documents
-                  </p>
-                </div>
-              )}
+                ) : (
+                  <div className="bg-white rounded-2xl border border-gray-200 p-16 text-center">
+                    <p className="text-4xl mb-3">👈</p>
+                    <p className="font-semibold text-gray-900 mb-1">Select a supplier</p>
+                    <p className="text-sm text-gray-400">Click a name on the left to review their documents</p>
+                  </div>
+                )}
+              </div>
+
             </div>
-          </div>
-        )}
-      </main>
-    </div>
+          )}
+        </main>
+      </div>
+    </>
   );
 }

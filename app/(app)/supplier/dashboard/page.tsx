@@ -26,7 +26,21 @@ export default async function SupplierDashboardPage() {
     redirect("/supplier/onboard");
   }
 
+  // Supplier must have accepted terms to access the dashboard
+  const step = dbUser.supplier.onboardingStep
+  if (step !== 'TERMS_ACCEPTED' && step !== 'COMPLETED') {
+    // Route them to wherever they left off
+    if (step === 'NOT_STARTED') redirect("/supplier/onboard")
+    if (step === 'PROFILE_COMPLETE') redirect("/supplier/onboard/kyc")
+    if (step === 'KYC_SUBMITTED') redirect("/supplier/onboard/products")
+    if (step === 'FIRST_PRODUCT') redirect("/supplier/onboard/terms")
+    redirect("/supplier/onboard")
+  }
+
   const s = dbUser.supplier;
+
+  // Infer the product type directly from the Prisma result
+  type PrismaProduct = (typeof s.products)[number];
 
   // Serialize — Prisma Decimal and Date objects cannot cross the Server→Client boundary
   const supplier = {
@@ -36,13 +50,13 @@ export default async function SupplierDashboardPage() {
     phone: s.phone,
     address: s.address,
     state: s.state,
-    supplierType: s.supplierType,
-    kycStatus: s.kycStatus,
+    supplierType: s.supplierType as string,
+    kycStatus: s.kycStatus as string,
     kycDocType: s.kycDocType,
     kycRejectionReason: s.kycRejectionReason,
     kycSubmittedAt: s.kycSubmittedAt?.toISOString() ?? null,
     kycReviewedAt: s.kycReviewedAt?.toISOString() ?? null,
-    onboardingStep: s.onboardingStep,
+    onboardingStep: s.onboardingStep as string,
     logoUrl: s.logoUrl,
     storeBannerUrl: s.storeBannerUrl,
     bio: s.bio,
@@ -50,7 +64,7 @@ export default async function SupplierDashboardPage() {
     termsAcceptedAt: s.termsAcceptedAt?.toISOString() ?? null,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
-    products: s.products.map((p) => ({
+    products: s.products.map((p: PrismaProduct) => ({
       id: p.id,
       supplierId: p.supplierId,
       name: p.name,

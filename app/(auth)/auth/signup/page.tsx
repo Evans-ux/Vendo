@@ -53,24 +53,26 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen bg-brand-charcoal flex">
       {/* ── Left panel — image ── */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#0d1117] flex-col items-center justify-center p-12">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-[-20%] left-[-20%] w-[500px] h-[500px] rounded-full bg-brand-orange/15 blur-[140px]" />
-          <div className="absolute bottom-[-20%] right-[-20%] w-[400px] h-[400px] rounded-full bg-brand-cream/5 blur-[120px]" />
-        </div>
-
-        <div className="relative z-10 text-center">
-          <div className="relative mb-8 flex justify-center">
-            <div className="absolute inset-0 bg-brand-orange/20 blur-[80px] rounded-full" />
-            <Image
-              src="/Vedo-logobag.png"
-              alt="Vendo"
-              width={300}
-              height={300}
-              className="relative z-10 drop-shadow-[0_0_60px_rgba(249,115,22,0.4)]"
-              priority
-            />
-          </div>
+       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#0d1117] flex-col items-center justify-center p-12">
+            {/* Glow */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute top-[-20%] left-[-20%] w-[500px] h-[500px] rounded-full bg-brand-orange/15 blur-[140px]" />
+              <div className="absolute bottom-[-20%] right-[-20%] w-[400px] h-[400px] rounded-full bg-brand-cream/5 blur-[120px]" />
+            </div>
+    
+            <div className="relative z-10 text-center">
+              {/* Bag image */}
+              <div className="relative mb-8 flex justify-center">
+                <div className="absolute inset-0 bg-brand-orange/20 blur-[80px] rounded-full" />
+                <Image
+                  src="/vendo-baglogo.png"
+                  alt="Vendo"
+                  width={320}
+                  height={320}
+                  className="relative z-10 drop-shadow-[0_0_60px_rgba(249,115,22,0.4)]"
+                  priority
+                />
+              </div>
 
           <h2 className="text-3xl font-bold text-brand-cream mb-3">Start selling today</h2>
           <p className="text-brand-cream/50 text-lg max-w-xs mx-auto leading-relaxed">
@@ -78,7 +80,7 @@ export default function SignupPage() {
           </p>
 
           <div className="mt-10 space-y-3">
-            {["✓ No website needed", "✓ AI handles customer support", "✓ Get paid via Flutterwave", "✓ Free to join"].map(item => (
+            {["✓ No website needed", "✓ AI handles customer support", "✓ Get paid via Paystack", "✓ Free to join"].map(item => (
               <p key={item} className="text-brand-cream/60 text-sm">{item}</p>
             ))}
           </div>

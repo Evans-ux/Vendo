@@ -1,14 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { login } from '@/app/actions/auth'
 import { toast } from 'sonner'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -42,6 +40,16 @@ export default function LoginPage() {
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
   }
 
+  // Admin link — signs in first, then the server action routes admins to /admin/dashboard.
+  // Non-admins just land on their supplier dashboard as normal.
+  const handleAdminAccess = () => {
+    if (!formData.email || !formData.password) {
+      toast.error('Sign in with your admin credentials first.')
+      return
+    }
+    handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+  }
+
   return (
     <div className="min-h-screen bg-brand-charcoal flex">
       {/* ── Left panel — image ── */}
@@ -73,7 +81,7 @@ export default function LoginPage() {
 
           {/* Stats */}
           <div className="flex gap-8 justify-center mt-10">
-            {[["25%", "Commission"], ["<3s", "AI Response"], ["100%", "Free to start"]].map(([val, label]) => (
+            {[["10%", "Commission"], ["<3s", "AI Response"], ["100%", "Free to start"]].map(([val, label]) => (
               <div key={label} className="text-center">
                 <p className="text-2xl font-bold text-brand-orange">{val}</p>
                 <p className="text-brand-cream/40 text-xs mt-0.5">{label}</p>
@@ -147,6 +155,17 @@ export default function LoginPage() {
           </div>
 
           <p className="text-center text-gray-600 text-xs mt-6">🔒 Protected by industry-standard encryption</p>
+
+          {/* Admin access — signs in and routes based on role */}
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={handleAdminAccess}
+              className="text-xs text-gray-700 hover:text-gray-500 transition-colors"
+            >
+              Admin access →
+            </button>
+          </div>
         </div>
       </div>
     </div>

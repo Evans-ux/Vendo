@@ -35,6 +35,8 @@ enum OnboardingStep {
   NOT_STARTED // just registered, hasn't touched onboarding
   PROFILE_COMPLETE // filled business name, phone, state, type
   KYC_SUBMITTED // uploaded identity/CAC document
+  FIRST_PRODUCT // suppliers first product 
+  TERMS_ACCEPTED// agreed to our terms and conditions
   COMPLETED // admin approved — supplier is live
 }
 

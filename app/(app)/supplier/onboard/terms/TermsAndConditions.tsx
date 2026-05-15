@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -14,7 +15,7 @@ const TERMS_SECTIONS = [
   },
   {
     title: "2. Commission & Pricing",
-    content: `You agree that Vendo retains a 25% commission on every sale made through the platform. Your products will be listed at a selling price calculated as: Selling Price = Your Base Price × 1.25. You will receive your base price per unit sold, minus any applicable payment processing fees charged by our payment provider (Flutterwave). Vendo reserves the right to review and update the commission structure with 30 days' notice.`,
+    content: `You agree that Vendo retains a 10% commission on every sale made through the platform. Your products will be listed at a selling price calculated as: Selling Price = Your Base Price × 1.10. You will receive your base price per unit sold, minus any applicable payment processing fees charged by our payment provider (Flutterwave). Vendo reserves the right to review and update the commission structure with 30 days' notice.`,
   },
   {
     title: "3. Product Standards",
@@ -42,7 +43,7 @@ const TERMS_SECTIONS = [
   },
 ];
 
-export default function TermsPage() {
+export default function TermsAndConditions() {
   const router = useRouter();
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -152,7 +153,7 @@ export default function TermsPage() {
             I have read and understood the Vendo Supplier Terms & Conditions. I agree to list and fulfil
             orders through the Vendo platform, with Vee AI handling customer interactions on Telegram
             and WhatsApp on my behalf. I accept the{" "}
-            <span className="text-brand-orange font-medium">25% commission structure</span>,
+            <span className="text-brand-orange font-medium">10% commission structure</span>,
             fulfilment responsibilities, and KYC verification requirements.
           </span>
         </motion.button>

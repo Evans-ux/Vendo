@@ -54,25 +54,51 @@ export async function login(email: string, password: string) {
     return { error: 'Login failed' }
   }
 
-  // Check onboarding status and route accordingly
-  try {
-    const dbUser = await prisma.user.findUnique({
-      where: { email: data.user.email! },
-      include: { supplier: true },
-    })
+  // Check onboarding status and route accordingly.
+  // NOTE: redirect() throws internally in Next.js — it must NOT be inside try/catch,
+  // otherwise the catch block swallows it and always sends the user to onboarding.
+  const dbUser = await prisma.user.findUnique({
+    where: { email: data.user.email! },
+    include: { supplier: true },
+  }).catch(() => null)
 
-    if (!dbUser?.supplier || dbUser.supplier.onboardingStep !== 'COMPLETED') {
-      revalidatePath('/supplier/onboard')
-      redirect('/supplier/onboard')
-    }
+  // Admins go straight to their dashboard — they have no supplier profile
+  if (dbUser?.role === 'ADMIN') {
+    revalidatePath('/admin/dashboard')
+    redirect('/admin/dashboard')
+  }
 
-    revalidatePath('/supplier/dashboard')
-    redirect('/supplier/dashboard')
-  } catch (err) {
-    // User not in DB yet — send to onboarding
+  const step = dbUser?.supplier?.onboardingStep
+
+  // Route to the correct step they left off at
+  if (!dbUser || !dbUser.supplier || step === 'NOT_STARTED') {
     revalidatePath('/supplier/onboard')
     redirect('/supplier/onboard')
   }
+
+  if (step === 'TERMS_ACCEPTED' || step === 'COMPLETED') {
+    revalidatePath('/supplier/dashboard')
+    redirect('/supplier/dashboard')
+  }
+
+  if (step === 'FIRST_PRODUCT') {
+    revalidatePath('/supplier/onboard/terms')
+    redirect('/supplier/onboard/terms')
+  }
+
+  if (step === 'KYC_SUBMITTED') {
+    revalidatePath('/supplier/onboard/products')
+    redirect('/supplier/onboard/products')
+  }
+
+  if (step === 'PROFILE_COMPLETE') {
+    revalidatePath('/supplier/onboard/kyc')
+    redirect('/supplier/onboard/kyc')
+  }
+
+  // Fallback
+  revalidatePath('/supplier/dashboard')
+  redirect('/supplier/dashboard')
 }
 
 export async function logout() {

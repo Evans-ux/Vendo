@@ -14,7 +14,6 @@ export default async function AdminDashboardPage() {
     redirect("/auth/login");
   }
 
-  // Check if user is admin
   const dbUser = await prisma.user.findUnique({
     where: { email: user.email! },
   });
@@ -28,12 +27,10 @@ export default async function AdminDashboardPage() {
   if (!statsResult.success) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600">{statsResult.error}</p>
-        </div>
+        <p className="text-red-600">{statsResult.error}</p>
       </div>
     );
   }
 
-  return <AdminDashboardClient stats={statsResult.stats!} />;
+  return <AdminDashboardClient stats={statsResult.stats} />;
 }
