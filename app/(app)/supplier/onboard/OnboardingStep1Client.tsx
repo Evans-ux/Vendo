@@ -34,6 +34,7 @@ const profileSchema = z.object({
   supplierType: z.enum(["LOCAL", "DROPSHIP"] as const, {
     error: "Please select a supplier type",
   }),
+  deliveryMethod: z.enum(["SELF_DELIVERY", "PLATFORM_LOGISTICS"] as const).optional(),
   address: z.string().optional(),
   bio: z.string().max(300, "Description must be under 300 characters").optional(),
 });
@@ -46,6 +47,7 @@ export default function OnboardingStep1Client() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -55,9 +57,13 @@ export default function OnboardingStep1Client() {
       address: "",
       state: "",
       supplierType: "LOCAL",
+      deliveryMethod: "SELF_DELIVERY",
       bio: "",
     },
   });
+
+  const supplierType = watch("supplierType");
+  const isLocal = supplierType === "LOCAL";
 
   const onSubmit = async (data: ProfileFormData) => {
     const toastId = toast.loading("Saving your business profile...");

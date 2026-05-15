@@ -16,6 +16,14 @@ interface Supplier {
   kycDocUrl: string | null;
   kycDocType: string | null;
   kycSubmittedAt: string | null;
+  // NEW: Business Verification
+  businessDocUrl: string | null;
+  businessDocType: string | null;
+  // NEW: Bank Account Details
+  bankName: string | null;
+  accountNumber: string | null;
+  accountHolderName: string | null;
+  // Other fields
   onboardingStep: string;
   bio: string | null;
   user: { name: string; email: string };

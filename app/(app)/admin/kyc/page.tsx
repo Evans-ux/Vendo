@@ -47,6 +47,14 @@ export default async function AdminKYCPage() {
     kycDocUrl: s.kycDocUrl,
     kycDocType: s.kycDocType,
     kycSubmittedAt: s.kycSubmittedAt?.toISOString() || null,
+    // NEW: Business Verification
+    businessDocUrl: s.businessDocUrl,
+    businessDocType: s.businessDocType,
+    // NEW: Bank Account Details
+    bankName: s.bankName,
+    accountNumber: s.accountNumber,
+    accountHolderName: s.accountHolderName,
+    // Other fields
     onboardingStep: s.onboardingStep,
     bio: s.bio,
     logoUrl: s.logoUrl,

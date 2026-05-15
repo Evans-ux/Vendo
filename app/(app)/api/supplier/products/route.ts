@@ -27,14 +27,37 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, category, basePrice, stock, sizes, imageUrls } = body;
+    const { name, description, category, basePrice, stock, sizes, imageUrls, deliveryMethod } = body;
 
-    if (!name || !basePrice || !stock || !imageUrls || imageUrls.length === 0) {
+    if (!name || !basePrice || !stock || !imageUrls || imageUrls.length === 0 || !deliveryMethod) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
+    }
+
+    // Validate delivery method
+    const validDeliveryMethods = ["SELF_DELIVERY", "PLATFORM_LOGISTICS", "DROPSHIP_HANDLED"];
+    if (!validDeliveryMethods.includes(deliveryMethod)) {
+      return NextResponse.json({ message: "Invalid delivery method" }, { status: 400 });
     }
 
     // Selling price = base price + 10% markup, rounded to 2dp
     const sellingPrice = Math.round(basePrice * 1.10 * 100) / 100;
+
+    // Calculate logistics fee based on category for PLATFORM_LOGISTICS
+    let logisticsFee = null;
+    if (deliveryMethod === "PLATFORM_LOGISTICS") {
+      const fees: Record<string, number> = {
+        'Accessories': 800,
+        'Footwear': 1500,
+        'Clothing': 1200,
+        'Tops': 1200,
+        'Bottoms': 1200,
+        'Dresses': 1200,
+        'Bags': 2000,
+        'Jewelry': 800,
+        'Other': 1500,
+      };
+      logisticsFee = fees[category] || 1500;
+    }
 
     const product = await prisma.product.create({
       data: {
@@ -47,6 +70,8 @@ export async function POST(request: NextRequest) {
         imageUrls,
         sizes,
         stock,
+        deliveryMethod,
+        logisticsFee,
         isApproved: false,  // approved in bulk when admin approves the supplier's KYC
         isActive: true,
       },

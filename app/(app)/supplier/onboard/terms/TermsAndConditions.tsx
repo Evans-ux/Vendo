@@ -22,7 +22,34 @@ const TERMS_SECTIONS = [
     content: `All products listed on Vendo must be legitimate, legal, and accurately described. You must not list counterfeit goods, stolen property, prohibited items, or products that infringe on intellectual property rights. Vendo reserves the right to remove any product at its discretion without prior notice. Repeated violations will result in permanent account removal.`,
   },
   {
-    title: "4. Order Fulfilment Responsibility",
+    title: "4. Delivery & Logistics",
+    content: `For LOCAL suppliers, you must choose a delivery method for each product you upload:
+
+Self-Delivery (Own Waybill):
+- You are responsible for all delivery arrangements
+- You must provide tracking/waybill to customers
+- You handle all delivery issues
+- No logistics fee charged by platform
+
+Platform Logistics:
+- Vendo arranges delivery on your behalf
+- Logistics fee: ₦[AMOUNT] per order (shown per product during upload)
+- Fee is deducted from your payout
+- Platform handles delivery issues
+- You must package products properly
+
+For DROPSHIP suppliers:
+- Third-party handles all delivery
+- Platform adds 10% markup to your prices
+- You receive payment after delivery confirmation
+- You handle all delivery arrangements
+
+Delivery timeframes:
+- LOCAL suppliers: 2–3 business days
+- DROPSHIP suppliers: 14–21 business days`,
+  },
+  {
+    title: "5. Order Fulfilment Responsibility",
     content: `You are solely responsible for fulfilling orders assigned to your Vendo store within the delivery timeframe stated during onboarding (Local suppliers: 2–3 business days; Dropship suppliers: 14–21 business days). Failure to fulfil orders on time or accurately may result in penalties, negative reviews, or account suspension. Vendo acts as a marketplace facilitator and is not liable for supplier fulfilment failures. Customer interactions are handled by Vee AI on Telegram and WhatsApp.`,
   },
   {
@@ -154,7 +181,7 @@ export default function TermsAndConditions() {
             orders through the Vendo platform, with Vee AI handling customer interactions on Telegram
             and WhatsApp on my behalf. I accept the{" "}
             <span className="text-brand-orange font-medium">10% commission structure</span>,
-            fulfilment responsibilities, and KYC verification requirements.
+            fulfilment responsibilities, KYC verification requirements, and delivery logistics terms.
           </span>
         </motion.button>
 

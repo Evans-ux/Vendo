@@ -9,29 +9,29 @@
   --brand-charcoal: #111827;
   --brand-cream: #fff7ed;
 
-  /* Light mode surfaces */
+  /* Light mode - Clean and Professional */
   --background: #ffffff;
-  --surface: #f9fafb;
-  --foreground: #111827;
-  --muted: #6b7280;
-  --border: #e5e7eb;
+  --surface: #f8fafc;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
 
   /* Shadcn CSS variable bridge */
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --card: #ffffff;
-  --card-foreground: #111827;
+  --card-foreground: #0f172a;
   --popover: #ffffff;
-  --popover-foreground: #111827;
+  --popover-foreground: #0f172a;
   --primary: #f97316;
   --primary-foreground: #ffffff;
-  --secondary: #fff7ed;
-  --secondary-foreground: #111827;
-  --muted-foreground: #6b7280;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted-foreground: #64748b;
   --accent: #fff7ed;
-  --accent-foreground: #111827;
+  --accent-foreground: #0f172a;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --input: #e5e7eb;
+  --input: #e2e8f0;
   --ring: #f97316;
 }
 
@@ -61,20 +61,32 @@
 
 /* Dark mode — charcoal background, cream text */
 .dark {
-  --background: #111827;
-  --surface: #1f2937;
-  --foreground: #fff7ed;
-  --muted: #9ca3af;
-  --border: #374151;
-  --card: #1f2937;
-  --card-foreground: #fff7ed;
-  --popover: #1f2937;
-  --popover-foreground: #fff7ed;
-  --secondary: #1f2937;
-  --secondary-foreground: #fff7ed;
-  --accent: #1f2937;
-  --accent-foreground: #fff7ed;
-  --input: #374151;
+  --background: #0f172a;
+  --surface: #1e293b;
+  --foreground: #f1f5f9;
+  --muted: #94a3b8;
+  --border: #334155;
+  --card: #1e293b;
+  --card-foreground: #f1f5f9;
+  --popover: #1e293b;
+  --popover-foreground: #f1f5f9;
+  --secondary: #1e293b;
+  --secondary-foreground: #f1f5f9;
+  --accent: #1e293b;
+  --accent-foreground: #f1f5f9;
+  --input: #334155;
+}
+
+/* Smooth theme transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+/* Disable transitions for specific elements */
+button, a, input, textarea, select {
+  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
 }
 
 body {

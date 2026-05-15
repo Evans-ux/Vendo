@@ -25,6 +25,12 @@ enum SupplierType {
   DROPSHIP // third-party fulfillment, slower delivery (14–21 days)
 }
 
+enum DeliveryMethod {
+  SELF_DELIVERY // LOCAL suppliers handle their own delivery (own waybill)
+  PLATFORM_LOGISTICS // LOCAL suppliers pay platform to handle delivery
+  DROPSHIP_HANDLED // DROPSHIP suppliers handle everything via API
+}
+
 enum KycStatus {
   PENDING // submitted, waiting for admin review
   APPROVED // admin verified the supplier's identity/business
@@ -126,11 +132,22 @@ model Supplier {
   // kycSubmittedAt timestamps when the doc was uploaded (for admin queue ordering).
   // kycReviewedAt timestamps when admin made a decision.
   kycStatus          KycStatus @default(PENDING)
-  kycDocUrl          String? // private Supabase Storage URL (kyc-documents bucket)
-  kycDocType         String? // "NIN" | "BVN" | "CAC" | "Passport" | "Driver's License"
+  kycDocUrl          String? // private Supabase Storage URL (kyc-documents bucket) - ID Document
+  kycDocType         String? // "NIN" | "BVN" | "Passport" | "Driver's License"
   kycRejectionReason String? // admin fills this when rejecting — shown to supplier
   kycSubmittedAt     DateTime? // when supplier uploaded the doc
   kycReviewedAt      DateTime? // when admin approved or rejected
+
+  // Business Verification (NEW - Step 2)
+  // Supplier must upload ONE of: CAC Document OR Bank Statement
+  businessDocUrl  String? // Supabase Storage URL for CAC or Bank Statement
+  businessDocType String? // "CAC" | "BANK_STATEMENT"
+
+  // Bank Account Details (NEW - Step 3)
+  // Required for payment processing - can be edited later from dashboard
+  bankName          String? // e.g., "GTBank", "Access Bank", "First Bank"
+  accountNumber     String? // 10-digit NUBAN account number
+  accountHolderName String? // Must match business name or owner name
 
   // Onboarding progress — drives the multi-step UI
   // NOT_STARTED → PROFILE_COMPLETE → KYC_SUBMITTED → COMPLETED
@@ -185,6 +202,18 @@ model Product {
   sizes Json
 
   stock Int @default(0)
+
+  // Delivery Method (for LOCAL suppliers only)
+  // SELF_DELIVERY = supplier uses own waybill, handles delivery themselves (FREE for supplier)
+  // PLATFORM_LOGISTICS = platform handles delivery, supplier pays logistics fee per order
+  // DROPSHIP_HANDLED = for DROPSHIP products (API integration, handled by third party)
+  deliveryMethod DeliveryMethod @default(SELF_DELIVERY)
+
+  // Logistics Fee (for PLATFORM_LOGISTICS products)
+  // The fee supplier pays per order for this specific product
+  // Example: 1500 (₦1,500 per delivery)
+  // Shown to supplier before they choose PLATFORM_LOGISTICS
+  logisticsFee Decimal? @db.Decimal(10, 2)
 
   // Admin must approve before product appears in Telegram bot search
   isApproved Boolean @default(false)

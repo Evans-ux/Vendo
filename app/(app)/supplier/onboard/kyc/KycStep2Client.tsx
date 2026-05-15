@@ -9,74 +9,157 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 
-const KYC_DOC_TYPES = [
+const ID_DOC_TYPES = [
   { value: "NIN", label: "National Identity Number (NIN)" },
   { value: "BVN", label: "Bank Verification Number (BVN)" },
-  { value: "CAC", label: "CAC Certificate (Registered Business)" },
   { value: "Passport", label: "International Passport" },
   { value: "Driver's License", label: "Driver's License" },
 ];
 
+const BUSINESS_DOC_TYPES = [
+  { value: "CAC", label: "CAC Certificate (Registered Business)" },
+  { value: "BANK_STATEMENT", label: "Bank Account Statement (Last 3 months)" },
+];
+
+const NIGERIAN_BANKS = [
+  "Access Bank", "Citibank", "Ecobank", "Fidelity Bank", "First Bank of Nigeria",
+  "First City Monument Bank (FCMB)", "Globus Bank", "Guaranty Trust Bank (GTBank)",
+  "Heritage Bank", "Keystone Bank", "Kuda Bank", "Opay", "Palmpay", "Polaris Bank",
+  "Providus Bank", "Stanbic IBTC Bank", "Standard Chartered Bank", "Sterling Bank",
+  "SunTrust Bank", "Union Bank", "United Bank for Africa (UBA)", "Unity Bank",
+  "Wema Bank", "Zenith Bank", "Other"
+];
+
 const kycSchema = z.object({
-  docType: z.string().min(1, "Please select a document type"),
+  // Step 1: Identity Document
+  idDocType: z.string().min(1, "Please select an ID document type"),
+  
+  // Step 2: Business Verification
+  businessDocType: z.string().min(1, "Please select a business document type"),
+  
+  // Step 3: Bank Account Details
+  bankName: z.string().min(1, "Please select your bank"),
+  accountNumber: z.string()
+    .min(10, "Account number must be 10 digits")
+    .max(10, "Account number must be 10 digits")
+    .regex(/^\d+$/, "Account number must contain only numbers"),
+  accountHolderName: z.string().min(2, "Please enter the account holder name"),
 });
 
 type KycFormData = z.infer<typeof kycSchema>;
 
 export default function KycStep2Client() {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [fileError, setFileError] = useState<string | null>(null);
+  
+  // File states
+  const [idFile, setIdFile] = useState<File | null>(null);
+  const [idPreview, setIdPreview] = useState<string | null>(null);
+  const [idFileError, setIdFileError] = useState<string | null>(null);
+  
+  const [businessFile, setBusinessFile] = useState<File | null>(null);
+  const [businessPreview, setBusinessPreview] = useState<string | null>(null);
+  const [businessFileError, setBusinessFileError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<KycFormData>({
     resolver: zodResolver(kycSchema),
-    defaultValues: { docType: "" },
+    defaultValues: {
+      idDocType: "",
+      businessDocType: "",
+      bankName: "",
+      accountNumber: "",
+      accountHolderName: "",
+    },
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const selectedBusinessDocType = watch("businessDocType");
+
+  const handleIdFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
-    setFileError(null);
+    setIdFileError(null);
 
     if (!selected) return;
 
     const validTypes = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
     if (!validTypes.includes(selected.type)) {
-      setFileError("Please upload a JPG, PNG, or PDF file.");
+      setIdFileError("Please upload a JPG, PNG, or PDF file.");
       return;
     }
     if (selected.size > 5 * 1024 * 1024) {
-      setFileError("File size must be less than 5MB.");
+      setIdFileError("File size must be less than 5MB.");
       return;
     }
 
-    setFile(selected);
+    setIdFile(selected);
     if (selected.type.startsWith("image/")) {
       const reader = new FileReader();
-      reader.onloadend = () => setPreview(reader.result as string);
+      reader.onloadend = () => setIdPreview(reader.result as string);
       reader.readAsDataURL(selected);
     } else {
-      setPreview(null);
+      setIdPreview(null);
+    }
+  };
+
+  const handleBusinessFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    setBusinessFileError(null);
+
+    if (!selected) return;
+
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
+    if (!validTypes.includes(selected.type)) {
+      setBusinessFileError("Please upload a JPG, PNG, or PDF file.");
+      return;
+    }
+    if (selected.size > 10 * 1024 * 1024) {
+      setBusinessFileError("File size must be less than 10MB.");
+      return;
+    }
+
+    setBusinessFile(selected);
+    if (selected.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onloadend = () => setBusinessPreview(reader.result as string);
+      reader.readAsDataURL(selected);
+    } else {
+      setBusinessPreview(null);
     }
   };
 
   const onSubmit = async (data: KycFormData) => {
-    if (!file) {
-      setFileError("Please upload your identity document.");
+    // Validate files
+    if (!idFile) {
+      setIdFileError("Please upload your identity document.");
+      return;
+    }
+    if (!businessFile) {
+      setBusinessFileError("Please upload your business document.");
       return;
     }
 
-    const toastId = toast.loading("Uploading your document securely...");
+    const toastId = toast.loading("Uploading your documents securely...");
 
     try {
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("docType", data.docType);
+      
+      // Identity document
+      formData.append("idFile", idFile);
+      formData.append("idDocType", data.idDocType);
+      
+      // Business document
+      formData.append("businessFile", businessFile);
+      formData.append("businessDocType", data.businessDocType);
+      
+      // Bank details
+      formData.append("bankName", data.bankName);
+      formData.append("accountNumber", data.accountNumber);
+      formData.append("accountHolderName", data.accountHolderName);
 
       const res = await fetch("/api/supplier/onboard/kyc", {
         method: "POST",
@@ -90,88 +173,195 @@ export default function KycStep2Client() {
         return;
       }
 
-      toast.success("Document uploaded! Taking you to your dashboard.", { id: toastId });
-      router.push("/supplier/onboard/terms");
+      toast.success("Documents uploaded successfully!", { id: toastId });
+      router.push("/supplier/onboard/products");
     } catch {
       toast.error("Network error. Please check your connection and try again.", { id: toastId });
     }
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       {/* Info Box */}
       <div className="bg-brand-charcoal/50 border border-brand-orange/30 rounded-lg p-4">
-        <h3 className="font-semibold text-sm text-brand-orange mb-2">Why KYC?</h3>
+        <h3 className="font-semibold text-sm text-brand-orange mb-2">🔒 Secure Verification Process</h3>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          All Vendo suppliers are verified to maintain a trusted marketplace for customers. Your
-          document is stored securely and only reviewed by our admin team. Verification usually
-          takes 24–48 hours.
+          All Vendo suppliers are verified to maintain a trusted marketplace. Your documents are encrypted
+          and only reviewed by our admin team. Verification usually takes 24–48 hours.
         </p>
       </div>
 
-      {/* Document Type */}
-      <div className="space-y-1">
-        <Label htmlFor="docType">
-          Document Type <span className="text-brand-orange">*</span>
-        </Label>
-        <Select id="docType" {...register("docType")}>
-          <option value="">Select document type</option>
-          {KYC_DOC_TYPES.map((type) => (
-            <option key={type.value} value={type.value}>{type.label}</option>
-          ))}
-        </Select>
-        {errors.docType && (
-          <p className="text-xs text-destructive mt-1">{errors.docType.message}</p>
-        )}
+      {/* STEP 1: Identity Document */}
+      <div className="space-y-4 p-6 border border-muted/30 rounded-xl bg-muted/5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-brand-orange text-white flex items-center justify-center font-bold text-sm">
+            1
+          </div>
+          <h3 className="text-lg font-semibold text-foreground">Identity Verification</h3>
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="idDocType">
+            ID Document Type <span className="text-brand-orange">*</span>
+          </Label>
+          <Select id="idDocType" {...register("idDocType")}>
+            <option value="">Select your ID type</option>
+            {ID_DOC_TYPES.map((type) => (
+              <option key={type.value} value={type.value}>{type.label}</option>
+            ))}
+          </Select>
+          {errors.idDocType && (
+            <p className="text-xs text-destructive mt-1">{errors.idDocType.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="idFile">
+            Upload ID Document <span className="text-brand-orange">*</span>
+          </Label>
+          <div className="border-2 border-dashed border-muted/50 rounded-lg p-6 text-center hover:border-brand-orange hover:bg-brand-orange/5 transition-all">
+            <input
+              id="idFile"
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,application/pdf"
+              onChange={handleIdFileChange}
+              className="hidden"
+            />
+            <label htmlFor="idFile" className="cursor-pointer flex flex-col items-center gap-2">
+              {idPreview ? (
+                <img src={idPreview} alt="ID Preview" className="max-h-32 rounded-lg shadow-md" />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-brand-charcoal/20 flex items-center justify-center text-brand-orange">
+                  📄
+                </div>
+              )}
+              <span className="text-sm font-medium">
+                {idFile ? idFile.name : "Click to upload ID (JPG, PNG, PDF - max 5MB)"}
+              </span>
+            </label>
+          </div>
+          {idFileError && <p className="text-xs text-destructive mt-1">{idFileError}</p>}
+        </div>
       </div>
 
-      {/* File Upload */}
-      <div className="space-y-1">
-        <Label htmlFor="file">
-          Upload Document <span className="text-brand-orange">*</span>
-        </Label>
-        <div className="border-2 border-dashed border-muted/50 rounded-lg p-8 text-center hover:border-brand-orange hover:bg-brand-orange/5 transition-all duration-300">
-          <input
-            id="file"
-            type="file"
-            accept="image/jpeg,image/jpg,image/png,application/pdf"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <label htmlFor="file" className="cursor-pointer flex flex-col items-center gap-3">
-            {preview ? (
-              <div className="relative group">
-                <img
-                  src={preview}
-                  alt="Preview"
-                  className="max-h-48 rounded-lg shadow-md border border-muted/20"
-                />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
-                  <span className="text-white text-sm font-medium">Change File</span>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="w-16 h-16 rounded-full bg-brand-charcoal/20 flex items-center justify-center text-brand-orange">
-                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                </div>
-                <span className="text-base font-medium text-foreground">
-                  Click to upload or drag and drop
-                </span>
-                <span className="text-sm text-muted-foreground">JPG, PNG, or PDF — max 5MB.</span>
-              </>
-            )}
-            {file && (
-              <span className="text-sm font-medium text-brand-orange mt-1 bg-brand-orange/10 px-3 py-1 rounded-full">
-                Selected: {file.name}
-              </span>
-            )}
-          </label>
+      {/* STEP 2: Business Verification */}
+      <div className="space-y-4 p-6 border border-muted/30 rounded-xl bg-muted/5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-brand-orange text-white flex items-center justify-center font-bold text-sm">
+            2
+          </div>
+          <h3 className="text-lg font-semibold text-foreground">Business Verification</h3>
         </div>
-        {fileError && <p className="text-xs text-destructive mt-1">{fileError}</p>}
+
+        <div className="space-y-1">
+          <Label htmlFor="businessDocType">
+            Business Document Type <span className="text-brand-orange">*</span>
+          </Label>
+          <Select id="businessDocType" {...register("businessDocType")}>
+            <option value="">Choose one option</option>
+            {BUSINESS_DOC_TYPES.map((type) => (
+              <option key={type.value} value={type.value}>{type.label}</option>
+            ))}
+          </Select>
+          {errors.businessDocType && (
+            <p className="text-xs text-destructive mt-1">{errors.businessDocType.message}</p>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            {selectedBusinessDocType === "CAC" && "Upload your CAC certificate if you have a registered business"}
+            {selectedBusinessDocType === "BANK_STATEMENT" && "Upload your bank statement from the last 3 months"}
+          </p>
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="businessFile">
+            Upload Business Document <span className="text-brand-orange">*</span>
+          </Label>
+          <div className="border-2 border-dashed border-muted/50 rounded-lg p-6 text-center hover:border-brand-orange hover:bg-brand-orange/5 transition-all">
+            <input
+              id="businessFile"
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,application/pdf"
+              onChange={handleBusinessFileChange}
+              className="hidden"
+            />
+            <label htmlFor="businessFile" className="cursor-pointer flex flex-col items-center gap-2">
+              {businessPreview ? (
+                <img src={businessPreview} alt="Business Doc Preview" className="max-h-32 rounded-lg shadow-md" />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-brand-charcoal/20 flex items-center justify-center text-brand-orange">
+                  🏢
+                </div>
+              )}
+              <span className="text-sm font-medium">
+                {businessFile ? businessFile.name : "Click to upload document (JPG, PNG, PDF - max 10MB)"}
+              </span>
+            </label>
+          </div>
+          {businessFileError && <p className="text-xs text-destructive mt-1">{businessFileError}</p>}
+        </div>
+      </div>
+
+      {/* STEP 3: Bank Account Details */}
+      <div className="space-y-4 p-6 border border-muted/30 rounded-xl bg-muted/5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-brand-orange text-white flex items-center justify-center font-bold text-sm">
+            3
+          </div>
+          <h3 className="text-lg font-semibold text-foreground">Bank Account Details</h3>
+        </div>
+
+        <p className="text-sm text-muted-foreground mb-4">
+          💰 This is where you'll receive payments. You can update these details later from your dashboard.
+        </p>
+
+        <div className="space-y-1">
+          <Label htmlFor="bankName">
+            Bank Name <span className="text-brand-orange">*</span>
+          </Label>
+          <Select id="bankName" {...register("bankName")}>
+            <option value="">Select your bank</option>
+            {NIGERIAN_BANKS.map((bank) => (
+              <option key={bank} value={bank}>{bank}</option>
+            ))}
+          </Select>
+          {errors.bankName && (
+            <p className="text-xs text-destructive mt-1">{errors.bankName.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="accountNumber">
+            Account Number <span className="text-brand-orange">*</span>
+          </Label>
+          <Input
+            id="accountNumber"
+            type="text"
+            placeholder="0123456789"
+            maxLength={10}
+            {...register("accountNumber")}
+          />
+          {errors.accountNumber && (
+            <p className="text-xs text-destructive mt-1">{errors.accountNumber.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="accountHolderName">
+            Account Holder Name <span className="text-brand-orange">*</span>
+          </Label>
+          <Input
+            id="accountHolderName"
+            type="text"
+            placeholder="Must match your business or personal name"
+            {...register("accountHolderName")}
+          />
+          {errors.accountHolderName && (
+            <p className="text-xs text-destructive mt-1">{errors.accountHolderName.message}</p>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            ⚠️ Account name must match your business name or your personal name on your ID
+          </p>
+        </div>
       </div>
 
       {/* Submit */}
@@ -182,14 +372,14 @@ export default function KycStep2Client() {
           onClick={() => router.push("/supplier/onboard")}
           className="flex-1 hover:bg-muted/50"
         >
-          Back
+          ← Back
         </Button>
         <Button
           type="submit"
           disabled={isSubmitting}
           className="flex-1 bg-brand-orange hover:bg-brand-orange/90 text-white"
         >
-          {isSubmitting ? "Uploading Document..." : "Submit & Go to Dashboard"}
+          {isSubmitting ? "Uploading..." : "Submit for Verification →"}
         </Button>
       </div>
     </form>

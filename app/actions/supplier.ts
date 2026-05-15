@@ -352,9 +352,59 @@ export async function getSupplierStats() {
   }
 }
 
-// ============================================
-// KYC SUBMISSION
-// ============================================
+export async function deleteProduct(productId: string) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    const supplier = await prisma.supplier.findUnique({
+      where: { userId: user.id },
+    })
+
+    if (!supplier) {
+      return { success: false, error: 'Supplier not found' }
+    }
+
+    // Verify product belongs to this supplier
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+    })
+
+    if (!product || product.supplierId !== supplier.id) {
+      return { success: false, error: 'Product not found or unauthorized' }
+    }
+
+    // Delete product images from Supabase Storage
+    if (product.imageUrls && product.imageUrls.length > 0) {
+      const filePaths = product.imageUrls.map(url => {
+        // Extract file path from URL
+        const match = url.match(/product-images\/(.+)$/)
+        return match ? match[1] : null
+      }).filter(Boolean) as string[]
+
+      if (filePaths.length > 0) {
+        await supabase.storage
+          .from('product-images')
+          .remove(filePaths)
+      }
+    }
+
+    // Delete product from database
+    await prisma.product.delete({
+      where: { id: productId },
+    })
+
+    revalidatePath('/supplier/products')
+    return { success: true, message: 'Product deleted successfully' }
+  } catch (error) {
+    console.error('Error deleting product:', error)
+    return { success: false, error: 'Failed to delete product' }
+  }
+}
 
 export async function submitKYC(data: {
   kycDocUrl: string

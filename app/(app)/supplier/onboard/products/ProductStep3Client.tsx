@@ -49,6 +49,9 @@ const productSchema = z.object({
       (v) => !isNaN(parseInt(v)) && parseInt(v) >= 1,
       "Stock must be at least 1"
     ),
+  deliveryMethod: z.enum(["SELF_DELIVERY", "PLATFORM_LOGISTICS"], {
+    errorMap: () => ({ message: "Please select a delivery method" }),
+  }),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -73,12 +76,32 @@ export default function ProductStep3Client() {
       category: "",
       basePrice: "",
       stock: "",
+      deliveryMethod: "SELF_DELIVERY",
     },
   });
 
   const category = watch("category");
   const basePrice = watch("basePrice");
+  const deliveryMethod = watch("deliveryMethod");
   const sizeOptions = SIZE_PRESETS[category] ?? [];
+
+  // Calculate logistics fee based on category
+  const calculateLogisticsFee = (): number => {
+    const fees: Record<string, number> = {
+      'Accessories': 800,
+      'Footwear': 1500,
+      'Clothing': 1200,
+      'Tops': 1200,
+      'Bottoms': 1200,
+      'Dresses': 1200,
+      'Bags': 2000,
+      'Jewelry': 800,
+      'Other': 1500,
+    };
+    return fees[category] || 1500; // Default ₦1,500
+  };
+
+  const logisticsFee = calculateLogisticsFee();
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setImageError(null);
@@ -275,6 +298,89 @@ export default function ProductStep3Client() {
               ₦{(parseFloat(basePrice) * 1.10).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </span>
           </div>
+        )}
+      </div>
+
+      {/* Delivery Method */}
+      <div className="space-y-3 pt-2">
+        <Label>
+          Delivery Method <span className="text-brand-orange">*</span>
+        </Label>
+        <p className="text-sm text-muted-foreground">
+          Choose how this product will be delivered to customers.
+        </p>
+        
+        <div className="space-y-3">
+          <label className="flex items-start gap-3 p-4 border rounded-lg cursor-pointer hover:border-brand-orange/50 transition-all duration-200">
+            <input
+              type="radio"
+              value="SELF_DELIVERY"
+              className="mt-1 text-brand-orange focus:ring-brand-orange"
+              {...register("deliveryMethod")}
+            />
+            <div className="flex-1">
+              <p className="font-semibold text-foreground">Self-Delivery (Own Waybill)</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                You handle delivery yourself • No logistics fee • Keep full profit
+              </p>
+              <div className="mt-2 flex items-center gap-2 text-sm">
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  You arrange delivery
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  No extra fees
+                </span>
+              </div>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-3 p-4 border rounded-lg cursor-pointer hover:border-brand-orange/50 transition-all duration-200">
+            <input
+              type="radio"
+              value="PLATFORM_LOGISTICS"
+              className="mt-1 text-brand-orange focus:ring-brand-orange"
+              {...register("deliveryMethod")}
+            />
+            <div className="flex-1">
+              <p className="font-semibold text-foreground">Platform Logistics</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Vendo handles delivery for you • More convenient • Logistics fee applies
+              </p>
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Logistics Fee:</span>
+                  <span className="font-bold text-brand-orange text-lg">
+                    ₦{logisticsFee.toLocaleString()} per order
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  This fee will be deducted from your payout when a customer orders this product.
+                </div>
+                {basePrice && !isNaN(parseFloat(basePrice)) && parseFloat(basePrice) > 0 && (
+                  <div className="mt-2 p-2 bg-brand-charcoal/20 rounded border border-brand-orange/10">
+                    <div className="flex justify-between text-sm">
+                      <span>Your payout per order:</span>
+                      <span className="font-semibold">
+                        ₦{(parseFloat(basePrice) * 1.10 - logisticsFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      (Selling price ₦{(parseFloat(basePrice) * 1.10).toLocaleString(undefined, { minimumFractionDigits: 2 })} - Logistics fee ₦{logisticsFee.toLocaleString()})
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </label>
+        </div>
+        {errors.deliveryMethod && (
+          <p className="text-xs text-destructive mt-1">{errors.deliveryMethod.message}</p>
         )}
       </div>
 

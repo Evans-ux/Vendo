@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { logout } from "@/app/actions/auth";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface Product {
   id: string;
@@ -68,21 +69,26 @@ export default function DashboardClient({ supplier, productCount }: DashboardCli
   const kycLabel = KYC_STATUS_LABELS[supplier.kycStatus] ?? supplier.kycStatus;
 
   return (
-    <div className="min-h-screen bg-brand-charcoal">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-white/10 bg-brand-charcoal/80 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-brand-cream">Vendo</h1>
-            <p className="text-xs text-brand-cream/50">Supplier Portal</p>
+      <header className="border-b border-border bg-card/50 backdrop-blur-md sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-foreground">Vendo</h1>
+              <p className="text-xs text-muted-foreground">Supplier Portal</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <button
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="px-3 py-2 sm:px-4 rounded-lg text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {isLoggingOut ? "Signing out..." : "Sign out"}
+              </button>
+            </div>
           </div>
-          <button
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-brand-cream/70 hover:text-brand-cream hover:bg-white/5 transition-colors disabled:opacity-50"
-          >
-            {isLoggingOut ? "Signing out..." : "Sign out"}
-          </button>
         </div>
       </header>
 
@@ -221,26 +227,32 @@ export default function DashboardClient({ supplier, productCount }: DashboardCli
         </div>
 
         {/* Quick Actions */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-          <h3 className="text-lg font-semibold text-brand-cream mb-4">Quick Actions</h3>
-          <div className="flex flex-wrap gap-3">
+        <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Quick Actions</h3>
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3">
+            <button
+              onClick={() => router.push("/supplier/products")}
+              className="px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold transition-colors whitespace-nowrap"
+            >
+              📦 Manage Products
+            </button>
             <button
               onClick={() => router.push("/supplier/orders")}
-              className="px-4 py-2 rounded-lg bg-brand-orange hover:bg-brand-orange/90 text-white text-sm font-medium transition-colors"
+              className="px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold transition-colors whitespace-nowrap"
             >
-              📦 View Orders
+              📋 View Orders
             </button>
             <button
               onClick={() => router.push("/supplier/onboard/products")}
-              className="px-4 py-2 rounded-lg bg-brand-orange hover:bg-brand-orange/90 text-white text-sm font-medium transition-colors"
+              className="px-4 py-2.5 rounded-lg border border-border text-foreground hover:bg-muted/50 text-sm font-medium transition-colors whitespace-nowrap"
             >
               + Add Product
             </button>
             <button
               onClick={() => router.push("/supplier/onboard")}
-              className="px-4 py-2 rounded-lg border border-white/20 text-brand-cream/70 hover:text-brand-cream hover:bg-white/5 text-sm font-medium transition-colors"
+              className="px-4 py-2.5 rounded-lg border border-border text-foreground hover:bg-muted/50 text-sm font-medium transition-colors whitespace-nowrap"
             >
-              Edit Profile
+              ⚙️ Edit Profile
             </button>
           </div>
         </div>
