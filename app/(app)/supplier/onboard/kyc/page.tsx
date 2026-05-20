@@ -10,9 +10,14 @@ export default async function SupplierOnboardingStep2() {
   if (!user) redirect("/auth/login")
 
   const dbUser = await prisma.user.findUnique({
-    where: { email: user.email! },
+    where: { id: user.id },
     include: { supplier: true },
   })
+
+  // Admins should not access supplier onboarding
+  if (dbUser?.role === "ADMIN") {
+    redirect("/admin/dashboard")
+  }
 
   const step = dbUser?.supplier?.onboardingStep
 
@@ -22,8 +27,7 @@ export default async function SupplierOnboardingStep2() {
     if (step === 'TERMS_ACCEPTED' || step === "COMPLETED") redirect ("/supplier/dashboard")
     if (step === 'FIRST_PRODUCT') redirect("/supplier/onboard/terms")
   // Guard: already past this step
-    if (step === 'KYC_SUBMITTED') redirect("/supplier/onboard/product")
-    if (step === 'PROFILE_COMPLETE') redirect("/supplier/onboard/kyc")
+    if (step === 'KYC_SUBMITTED') redirect("/supplier/onboard/products");
     
 
   return <KycStep2Client />

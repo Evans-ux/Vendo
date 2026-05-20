@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { createClient } from "@/lib/supabase/server"
 
 // ============================================
 // SUPPLIER MANAGEMENT
@@ -287,5 +288,67 @@ export async function getAdminStats(): Promise<{ success: true; stats: AdminStat
   } catch (error) {
     console.error('Error fetching admin stats:', error)
     return { success: false, error: 'Failed to fetch stats' }
+  }
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+export async function toggleUserRole(userId: string, newRole: "ADMIN" | "CUSTOMER" | "SUPPLIER") {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    if (dbUser?.role !== "ADMIN") throw new Error("Forbidden: Admins only");
+    
+    await prisma.user.update({
+      where: { id: userId },
+      data: { role: newRole }
+    });
+
+    revalidatePath("/admin/customers");
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function deleteUserAccount(userId: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    if (dbUser?.role !== "ADMIN") throw new Error("Forbidden: Admins only");
+
+    // 1. Check if user is a supplier
+    const supplier = await prisma.supplier.findUnique({ where: { userId } });
+    if (supplier) {
+      await prisma.product.deleteMany({ where: { supplierId: supplier.id } });
+      await prisma.earningsTransaction.deleteMany({ where: { supplierId: supplier.id } });
+      await prisma.withdrawalRequest.deleteMany({ where: { supplierId: supplier.id } });
+      await prisma.supplier.delete({ where: { id: supplier.id } });
+    }
+
+    // 2. Delete Orders and OrderItems associated with user
+    const userOrders = await prisma.order.findMany({ where: { userId } });
+    const orderIds = userOrders.map(o => o.id);
+    await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
+    await prisma.order.deleteMany({ where: { userId } });
+
+    // 3. Delete the user
+    await prisma.user.delete({
+      where: { id: userId }
+    });
+
+    revalidatePath("/admin/customers");
+    return { success: true };
+  } catch (error: any) {
+    console.error(error);
+    return { success: false, error: error.message || "Failed to delete user" };
   }
 }

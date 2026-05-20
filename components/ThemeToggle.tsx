@@ -5,30 +5,49 @@ import { useEffect, useState } from "react";
 
 export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  const toggle = () => {
+    // next-themes uses disableTransitionOnChange which strips transitions
+    // during the class swap to prevent FOUC. We re-enable them for 500ms
+    // so the switch feels smooth rather than instant.
+    const css = document.createElement("style");
+    css.textContent = `
+      *, *::before, *::after {
+        transition: background-color 250ms cubic-bezier(0.4,0,0.2,1),
+                    border-color 250ms cubic-bezier(0.4,0,0.2,1),
+                    color 250ms cubic-bezier(0.4,0,0.2,1) !important;
+      }
+    `;
+    document.head.appendChild(css);
+
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+
+    // Remove the override after the transition completes
+    setTimeout(() => document.head.removeChild(css), 500);
+  };
+
   if (!mounted) {
-    return (
-      <button className="w-10 h-10 rounded-lg bg-muted/50 animate-pulse" />
-    );
+    return <button className="w-10 h-10 rounded-lg bg-muted/50 animate-pulse" aria-hidden />;
   }
+
+  const isDark = resolvedTheme === "dark";
 
   return (
     <button
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      className="relative w-10 h-10 rounded-lg bg-muted/50 hover:bg-muted transition-all duration-300 flex items-center justify-center group"
-      aria-label="Toggle theme"
+      onClick={toggle}
+      className="relative w-10 h-10 rounded-lg bg-muted/50 hover:bg-muted transition-colors duration-200 flex items-center justify-center"
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      title={isDark ? "Light mode" : "Dark mode"}
     >
-      {/* Sun icon (light mode) */}
+      {/* Sun — shown in dark mode (click to go light) */}
       <svg
-        className={`absolute w-5 h-5 transition-all duration-300 ${
-          theme === "dark"
-            ? "rotate-90 scale-0 opacity-0"
-            : "rotate-0 scale-100 opacity-100"
+        className={`absolute w-5 h-5 text-foreground transition-all duration-300 ${
+          isDark ? "rotate-0 scale-100 opacity-100" : "rotate-90 scale-0 opacity-0"
         }`}
         fill="none"
         stroke="currentColor"
@@ -42,12 +61,10 @@ export function ThemeToggle() {
         />
       </svg>
 
-      {/* Moon icon (dark mode) */}
+      {/* Moon — shown in light mode (click to go dark) */}
       <svg
-        className={`absolute w-5 h-5 transition-all duration-300 ${
-          theme === "dark"
-            ? "rotate-0 scale-100 opacity-100"
-            : "-rotate-90 scale-0 opacity-0"
+        className={`absolute w-5 h-5 text-foreground transition-all duration-300 ${
+          isDark ? "-rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100"
         }`}
         fill="none"
         stroke="currentColor"

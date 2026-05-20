@@ -4,36 +4,38 @@ import { prisma } from '@/lib/prisma'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
+// Helper — gets the DB supplier record for the currently logged-in user.
+// All functions use email (from Supabase Auth) to find the DB user,
+// then join to supplier. This matches the pattern used everywhere else.
+async function getAuthSupplier() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user?.email) return { supabase, supplier: null, error: 'Not authenticated' }
+
+  const dbUser = await prisma.user.findUnique({
+    where: { email: user.email },
+    include: { supplier: true },
+  })
+
+  if (!dbUser?.supplier) return { supabase, supplier: null, error: 'Supplier not found' }
+  return { supabase, supplier: dbUser.supplier, error: null }
+}
+
 // ============================================
 // SUPPLIER PROFILE
 // ============================================
 
 export async function getSupplierProfile() {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { supplier, error } = await getAuthSupplier()
+    if (error || !supplier) return { success: false, error }
 
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
-    }
-
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-      include: {
-        user: true,
-        _count: {
-          select: {
-            products: true,
-          },
-        },
-      },
+    const full = await prisma.supplier.findUnique({
+      where: { id: supplier.id },
+      include: { user: true, _count: { select: { products: true } } },
     })
 
-    if (!supplier) {
-      return { success: false, error: 'Supplier not found' }
-    }
-
-    return { success: true, supplier }
+    return { success: true, supplier: full }
   } catch (error) {
     console.error('Error fetching supplier profile:', error)
     return { success: false, error: 'Failed to fetch profile' }
@@ -48,25 +50,10 @@ export async function updateSupplierProfile(data: {
   bio?: string
 }) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { supplier, error } = await getAuthSupplier()
+    if (error || !supplier) return { success: false, error }
 
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
-    }
-
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-    })
-
-    if (!supplier) {
-      return { success: false, error: 'Supplier not found' }
-    }
-
-    await prisma.supplier.update({
-      where: { id: supplier.id },
-      data,
-    })
+    await prisma.supplier.update({ where: { id: supplier.id }, data })
 
     revalidatePath('/supplier/profile')
     return { success: true, message: 'Profile updated successfully' }
@@ -82,54 +69,22 @@ export async function updateSupplierProfile(data: {
 
 export async function getSupplierOrders(status?: string) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
-    }
-
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-    })
-
-    if (!supplier) {
-      return { success: false, error: 'Supplier not found' }
-    }
+    const { supplier, error } = await getAuthSupplier()
+    if (error || !supplier) return { success: false, error }
 
     const orders = await prisma.order.findMany({
       where: {
-        items: {
-          some: {
-            product: {
-              supplierId: supplier.id,
-            },
-          },
-        },
+        items: { some: { product: { supplierId: supplier.id } } },
         ...(status && { status: status as any }),
       },
       include: {
-        user: {
-          select: {
-            name: true,
-            email: true,
-            phone: true,
-          },
-        },
+        user: { select: { name: true, email: true, phone: true } },
         items: {
-          where: {
-            product: {
-              supplierId: supplier.id,
-            },
-          },
-          include: {
-            product: true,
-          },
+          where: { product: { supplierId: supplier.id } },
+          include: { product: true },
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     })
 
     return { success: true, orders }
@@ -141,12 +96,8 @@ export async function getSupplierOrders(status?: string) {
 
 export async function updateOrderStatus(orderId: string, status: string) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
-    }
+    const { supplier, error } = await getAuthSupplier()
+    if (error || !supplier) return { success: false, error }
 
     await prisma.order.update({
       where: { id: orderId },
@@ -167,20 +118,8 @@ export async function updateOrderStatus(orderId: string, status: string) {
 
 export async function getSupplierProducts() {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
-    }
-
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-    })
-
-    if (!supplier) {
-      return { success: false, error: 'Supplier not found' }
-    }
+    const { supplier, error } = await getAuthSupplier()
+    if (error || !supplier) return { success: false, error }
 
     const products = await prisma.product.findMany({
       where: { supplierId: supplier.id },
@@ -202,31 +141,31 @@ export async function createProduct(data: {
   imageUrls: string[]
   sizes: any
   stock: number
+  deliveryMethod?: 'SELF_DELIVERY' | 'PLATFORM_LOGISTICS' | 'DROPSHIP_HANDLED'
+  logisticsFee?: number
 }) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { supplier, error } = await getAuthSupplier()
+    if (error || !supplier) return { success: false, error }
 
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
-    }
-
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-    })
-
-    if (!supplier) {
-      return { success: false, error: 'Supplier not found' }
-    }
-
-    // Calculate selling price (25% markup)
-    const sellingPrice = Math.round(data.basePrice * 1.25 * 100) / 100
+    // 10% markup
+    const sellingPrice = Math.round(data.basePrice * 1.10 * 100) / 100
 
     await prisma.product.create({
       data: {
-        ...data,
-        sellingPrice,
         supplierId: supplier.id,
+        name: data.name,
+        description: data.description,
+        category: data.category,
+        basePrice: data.basePrice,
+        sellingPrice,
+        imageUrls: data.imageUrls,
+        sizes: data.sizes,
+        stock: data.stock,
+        deliveryMethod: data.deliveryMethod ?? 'SELF_DELIVERY',
+        logisticsFee: data.logisticsFee ?? null,
+        isApproved: false,
+        isActive: true,
       },
     })
 
@@ -238,24 +177,34 @@ export async function createProduct(data: {
   }
 }
 
-export async function updateProduct(productId: string, data: any) {
+export async function updateProduct(productId: string, data: {
+  name?: string
+  description?: string
+  category?: string
+  basePrice?: number
+  stock?: number
+  deliveryMethod?: 'SELF_DELIVERY' | 'PLATFORM_LOGISTICS' | 'DROPSHIP_HANDLED'
+  logisticsFee?: number | null
+  isActive?: boolean
+}) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { supplier, error } = await getAuthSupplier()
+    if (error || !supplier) return { success: false, error }
 
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
+    // Verify ownership
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    if (!product || product.supplierId !== supplier.id) {
+      return { success: false, error: 'Product not found or unauthorized' }
     }
 
-    // Recalculate selling price if basePrice changed
+    const updateData: any = { ...data }
+
+    // Recalculate selling price at 10% if basePrice changed
     if (data.basePrice) {
-      data.sellingPrice = Math.round(data.basePrice * 1.25 * 100) / 100
+      updateData.sellingPrice = Math.round(data.basePrice * 1.10 * 100) / 100
     }
 
-    await prisma.product.update({
-      where: { id: productId },
-      data,
-    })
+    await prisma.product.update({ where: { id: productId }, data: updateData })
 
     revalidatePath('/supplier/products')
     return { success: true, message: 'Product updated successfully' }
@@ -267,16 +216,27 @@ export async function updateProduct(productId: string, data: any) {
 
 export async function deleteProduct(productId: string) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { supabase, supplier, error } = await getAuthSupplier()
+    if (error || !supplier) return { success: false, error }
 
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
+    // Verify ownership
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    if (!product || product.supplierId !== supplier.id) {
+      return { success: false, error: 'Product not found or unauthorized' }
     }
 
-    await prisma.product.delete({
-      where: { id: productId },
-    })
+    // Delete images from Supabase Storage
+    if (product.imageUrls.length > 0) {
+      const filePaths = product.imageUrls
+        .map(url => url.match(/product-images\/(.+)$/)?.[1])
+        .filter(Boolean) as string[]
+
+      if (filePaths.length > 0) {
+        await supabase.storage.from('product-images').remove(filePaths)
+      }
+    }
+
+    await prisma.product.delete({ where: { id: productId } })
 
     revalidatePath('/supplier/products')
     return { success: true, message: 'Product deleted successfully' }
@@ -292,40 +252,18 @@ export async function deleteProduct(productId: string) {
 
 export async function getSupplierStats() {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
-    }
-
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-    })
-
-    if (!supplier) {
-      return { success: false, error: 'Supplier not found' }
-    }
+    const { supplier, error } = await getAuthSupplier()
+    if (error || !supplier) return { success: false, error }
 
     const [totalProducts, totalOrders, pendingOrders, revenue] = await Promise.all([
       prisma.product.count({ where: { supplierId: supplier.id } }),
       prisma.order.count({
-        where: {
-          items: {
-            some: {
-              product: { supplierId: supplier.id },
-            },
-          },
-        },
+        where: { items: { some: { product: { supplierId: supplier.id } } } },
       }),
       prisma.order.count({
         where: {
           status: 'PENDING',
-          items: {
-            some: {
-              product: { supplierId: supplier.id },
-            },
-          },
+          items: { some: { product: { supplierId: supplier.id } } },
         },
       }),
       prisma.orderItem.aggregate({
@@ -343,7 +281,7 @@ export async function getSupplierStats() {
         totalProducts,
         totalOrders,
         pendingOrders,
-        revenue: revenue._sum.unitPrice || 0,
+        revenue: Number(revenue._sum.unitPrice ?? 0),
       },
     }
   } catch (error) {
@@ -352,79 +290,14 @@ export async function getSupplierStats() {
   }
 }
 
-export async function deleteProduct(productId: string) {
+// ============================================
+// KYC
+// ============================================
+
+export async function submitKYC(data: { kycDocUrl: string; kycDocType: string }) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
-    }
-
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-    })
-
-    if (!supplier) {
-      return { success: false, error: 'Supplier not found' }
-    }
-
-    // Verify product belongs to this supplier
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    })
-
-    if (!product || product.supplierId !== supplier.id) {
-      return { success: false, error: 'Product not found or unauthorized' }
-    }
-
-    // Delete product images from Supabase Storage
-    if (product.imageUrls && product.imageUrls.length > 0) {
-      const filePaths = product.imageUrls.map(url => {
-        // Extract file path from URL
-        const match = url.match(/product-images\/(.+)$/)
-        return match ? match[1] : null
-      }).filter(Boolean) as string[]
-
-      if (filePaths.length > 0) {
-        await supabase.storage
-          .from('product-images')
-          .remove(filePaths)
-      }
-    }
-
-    // Delete product from database
-    await prisma.product.delete({
-      where: { id: productId },
-    })
-
-    revalidatePath('/supplier/products')
-    return { success: true, message: 'Product deleted successfully' }
-  } catch (error) {
-    console.error('Error deleting product:', error)
-    return { success: false, error: 'Failed to delete product' }
-  }
-}
-
-export async function submitKYC(data: {
-  kycDocUrl: string
-  kycDocType: string
-}) {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { success: false, error: 'Not authenticated' }
-    }
-
-    const supplier = await prisma.supplier.findUnique({
-      where: { userId: user.id },
-    })
-
-    if (!supplier) {
-      return { success: false, error: 'Supplier not found' }
-    }
+    const { supplier, error } = await getAuthSupplier()
+    if (error || !supplier) return { success: false, error }
 
     await prisma.supplier.update({
       where: { id: supplier.id },

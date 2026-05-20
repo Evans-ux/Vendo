@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select } from "@/components/ui/select";
 
 const NIGERIAN_STATES = [
   "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue",
@@ -31,10 +30,6 @@ const profileSchema = z.object({
       "Enter a valid Nigerian phone number (e.g. 08012345678)"
     ),
   state: z.string().optional(),
-  supplierType: z.enum(["LOCAL", "DROPSHIP"] as const, {
-    error: "Please select a supplier type",
-  }),
-  deliveryMethod: z.enum(["SELF_DELIVERY", "PLATFORM_LOGISTICS"] as const).optional(),
   address: z.string().optional(),
   bio: z.string().max(300, "Description must be under 300 characters").optional(),
 });
@@ -47,7 +42,6 @@ export default function OnboardingStep1Client() {
   const {
     register,
     handleSubmit,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -56,14 +50,9 @@ export default function OnboardingStep1Client() {
       phone: "",
       address: "",
       state: "",
-      supplierType: "LOCAL",
-      deliveryMethod: "SELF_DELIVERY",
       bio: "",
     },
   });
-
-  const supplierType = watch("supplierType");
-  const isLocal = supplierType === "LOCAL";
 
   const onSubmit = async (data: ProfileFormData) => {
     const toastId = toast.loading("Saving your business profile...");
@@ -72,7 +61,8 @@ export default function OnboardingStep1Client() {
       const res = await fetch("/api/supplier/onboard/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        // All suppliers are LOCAL — delivery method is chosen per-product at step 3
+        body: JSON.stringify({ ...data, supplierType: "LOCAL" }),
       });
 
       const result = await res.json();
@@ -91,6 +81,7 @@ export default function OnboardingStep1Client() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+
       {/* Business Name */}
       <div className="space-y-1">
         <Label htmlFor="businessName">
@@ -124,33 +115,19 @@ export default function OnboardingStep1Client() {
         )}
       </div>
 
-      {/* State & Supplier Type */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-1">
-          <Label htmlFor="state">State</Label>
-          <Select id="state" className="focus-visible:ring-brand-orange" {...register("state")}>
-            <option value="">Select state</option>
-            {NIGERIAN_STATES.map((state) => (
-              <option key={state} value={state}>{state}</option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="space-y-1">
-          <Label htmlFor="supplierType">
-            Supplier Type <span className="text-brand-orange">*</span>
-          </Label>
-          <Select id="supplierType" {...register("supplierType")}>
-            <option value="LOCAL">Local (I ship products myself)</option>
-            <option value="DROPSHIP">Dropship (Third-party fulfillment)</option>
-          </Select>
-          {errors.supplierType && (
-            <p className="text-xs text-destructive mt-1">{errors.supplierType.message}</p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Local: 2–3 day delivery. Dropship: 14–21 days.
-          </p>
-        </div>
+      {/* State */}
+      <div className="space-y-1">
+        <Label htmlFor="state">State</Label>
+        <select
+          id="state"
+          {...register("state")}
+          className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange"
+        >
+          <option value="">Select your state</option>
+          {NIGERIAN_STATES.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
       </div>
 
       {/* Address */}
@@ -162,14 +139,22 @@ export default function OnboardingStep1Client() {
           className="focus-visible:ring-brand-orange"
           {...register("address")}
         />
-        <p className="text-xs text-muted-foreground">
-          Required for local suppliers, optional for dropshippers.
+        <p className="text-xs text-muted-foreground mt-1">
+          Your pickup/dispatch address — customers won't see this.
+        </p>
+      </div>
+
+      {/* Delivery info banner */}
+      <div className="rounded-xl bg-brand-orange/5 border border-brand-orange/20 p-4">
+        <p className="text-sm font-semibold text-brand-orange mb-1">📦 Delivery Method</p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          You'll choose how each product is delivered (your own waybill or Vendo logistics) when you add products in Step 3. No need to decide now.
         </p>
       </div>
 
       {/* Bio */}
       <div className="space-y-1">
-        <Label htmlFor="bio">Store Description</Label>
+        <Label htmlFor="bio">Store Description <span className="text-muted-foreground text-xs">(optional)</span></Label>
         <Textarea
           id="bio"
           placeholder="Tell customers about what you sell and why they should buy from you..."
@@ -183,12 +168,12 @@ export default function OnboardingStep1Client() {
       </div>
 
       {/* Submit */}
-      <div className="flex gap-4 pt-4 border-t border-muted/20">
+      <div className="flex gap-4 pt-4 border-t border-border">
         <Button
           type="button"
           variant="outline"
           onClick={() => router.push("/")}
-          className="flex-1 hover:bg-muted/50"
+          className="flex-1"
         >
           Cancel
         </Button>
@@ -197,7 +182,7 @@ export default function OnboardingStep1Client() {
           disabled={isSubmitting}
           className="flex-1 bg-brand-orange hover:bg-brand-orange/90 text-white"
         >
-          {isSubmitting ? "Saving Profile..." : "Continue to Next Step"}
+          {isSubmitting ? "Saving..." : "Continue to KYC →"}
         </Button>
       </div>
     </form>

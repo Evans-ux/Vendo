@@ -15,7 +15,7 @@ export default async function AdminDashboardPage() {
   }
 
   const dbUser = await prisma.user.findUnique({
-    where: { email: user.email! },
+    where: { id: user.id },
   });
 
   if (!dbUser || dbUser.role !== "ADMIN") {

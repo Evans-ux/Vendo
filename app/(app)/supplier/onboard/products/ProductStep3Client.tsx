@@ -49,8 +49,8 @@ const productSchema = z.object({
       (v) => !isNaN(parseInt(v)) && parseInt(v) >= 1,
       "Stock must be at least 1"
     ),
-  deliveryMethod: z.enum(["SELF_DELIVERY", "PLATFORM_LOGISTICS"], {
-    errorMap: () => ({ message: "Please select a delivery method" }),
+  deliveryMethod: z.enum(["SELF_DELIVERY", "PLATFORM_LOGISTICS"] as const, {
+    error: "Please select a delivery method",
   }),
 });
 
@@ -292,7 +292,7 @@ export default function ProductStep3Client() {
           <p className="text-xs text-destructive mt-1">{errors.basePrice.message}</p>
         )}
         {basePrice && !isNaN(parseFloat(basePrice)) && parseFloat(basePrice) > 0 && (
-          <div className="mt-2 p-3 bg-brand-charcoal/30 rounded-lg border border-brand-orange/20 flex justify-between items-center">
+          <div className="mt-2 p-3 bg-muted/30 rounded-lg border border-brand-orange/20 flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Selling price (with 10% markup):</span>
             <span className="font-bold text-brand-orange text-lg">
               ₦{(parseFloat(basePrice) * 1.10).toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -363,7 +363,7 @@ export default function ProductStep3Client() {
                   This fee will be deducted from your payout when a customer orders this product.
                 </div>
                 {basePrice && !isNaN(parseFloat(basePrice)) && parseFloat(basePrice) > 0 && (
-                  <div className="mt-2 p-2 bg-brand-charcoal/20 rounded border border-brand-orange/10">
+                  <div className="mt-2 p-2 bg-muted/20 rounded border border-brand-orange/10">
                     <div className="flex justify-between text-sm">
                       <span>Your payout per order:</span>
                       <span className="font-semibold">
@@ -427,7 +427,7 @@ export default function ProductStep3Client() {
             htmlFor="images"
             className="cursor-pointer flex flex-col items-center gap-3 text-center"
           >
-            <div className="w-14 h-14 rounded-full bg-brand-charcoal/20 flex items-center justify-center text-brand-orange">
+            <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center text-brand-orange">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"

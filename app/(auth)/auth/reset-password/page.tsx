@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { resetPassword } from '@/app/actions/auth'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { ArrowLeft, Lock, Eye, EyeOff, CheckCircle } from 'lucide-react'
 

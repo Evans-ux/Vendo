@@ -15,43 +15,40 @@ export async function POST(request: NextRequest) {
     }
 
     const formData = await request.formData();
-    
-    // Step 1: Identity Document
-    const idFile = formData.get("idFile") as File;
+
+    // Identity Document
+    const idFile    = formData.get("idFile")    as File;
     const idDocType = formData.get("idDocType") as string;
-    
-    // Step 2: Business Document
-    const businessFile = formData.get("businessFile") as File;
+
+    // Business Document
+    const businessFile    = formData.get("businessFile")    as File;
     const businessDocType = formData.get("businessDocType") as string;
-    
-    // Step 3: Bank Account Details
-    const bankName = formData.get("bankName") as string;
-    const accountNumber = formData.get("accountNumber") as string;
+
+    // Bank Account Details (accountHolderName is the Flutterwave-verified name)
+    const bankName          = formData.get("bankName")          as string;
+    const bankCode          = formData.get("bankCode")          as string | null;
+    const accountNumber     = formData.get("accountNumber")     as string;
     const accountHolderName = formData.get("accountHolderName") as string;
 
-    // Validate all required fields
+    // ── Validation ────────────────────────────────────────────────────────────
     if (!idFile || !idDocType) {
       return NextResponse.json(
         { message: "Identity document and type are required" },
         { status: 400 }
       );
     }
-
     if (!businessFile || !businessDocType) {
       return NextResponse.json(
         { message: "Business document and type are required" },
         { status: 400 }
       );
     }
-
     if (!bankName || !accountNumber || !accountHolderName) {
       return NextResponse.json(
         { message: "All bank account details are required" },
         { status: 400 }
       );
     }
-
-    // Validate account number format
     if (!/^\d{10}$/.test(accountNumber)) {
       return NextResponse.json(
         { message: "Account number must be exactly 10 digits" },
@@ -59,92 +56,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Look up user by Supabase UUID (not email) ─────────────────────────────
+    // Using id is more reliable — the webhook/signup creates the row with the UUID.
     const dbUser = await prisma.user.findUnique({
-      where: { email: user.email! },
+      where: { id: user.id },
       include: { supplier: true },
     });
 
-    if (!dbUser || !dbUser.supplier) {
+    if (!dbUser) {
+      // Fallback: try by email in case the row was created before UUID sync
+      const byEmail = await prisma.user.findUnique({
+        where: { email: user.email! },
+        include: { supplier: true },
+      });
+      if (!byEmail || !byEmail.supplier) {
+        return NextResponse.json(
+          { message: "Supplier profile not found. Please complete Step 1 first." },
+          { status: 404 }
+        );
+      }
+      // If found by email but id doesn't match, update the id
+      if (byEmail.id !== user.id) {
+        await prisma.user.update({
+          where: { email: user.email! },
+          data: { id: user.id },
+        });
+      }
+      return handleUpload(supabase, byEmail.supplier.id, {
+        idFile, idDocType, businessFile, businessDocType,
+        bankName, bankCode, accountNumber, accountHolderName,
+      });
+    }
+
+    if (!dbUser.supplier) {
       return NextResponse.json(
-        { message: "Supplier profile not found. Complete Step 1 first." },
+        { message: "Supplier profile not found. Please complete Step 1 first." },
         { status: 404 }
       );
     }
 
-    const supplierId = dbUser.supplier.id;
-
-    // Upload Identity Document to Supabase Storage
-    const idFileName = `${supplierId}-id-${Date.now()}-${idFile.name}`;
-    const idFileBuffer = await idFile.arrayBuffer();
-
-    const { error: idUploadError } = await supabase.storage
-      .from("kyc-documents")
-      .upload(idFileName, idFileBuffer, {
-        contentType: idFile.type,
-        upsert: false,
-      });
-
-    if (idUploadError) {
-      console.error("ID document upload error:", idUploadError);
-      return NextResponse.json(
-        { message: "Identity document upload failed", error: idUploadError.message },
-        { status: 500 }
-      );
-    }
-
-    // Upload Business Document to Supabase Storage
-    const businessFileName = `${supplierId}-business-${Date.now()}-${businessFile.name}`;
-    const businessFileBuffer = await businessFile.arrayBuffer();
-
-    const { error: businessUploadError } = await supabase.storage
-      .from("kyc-documents")
-      .upload(businessFileName, businessFileBuffer, {
-        contentType: businessFile.type,
-        upsert: false,
-      });
-
-    if (businessUploadError) {
-      console.error("Business document upload error:", businessUploadError);
-      // Clean up the ID document if business upload fails
-      await supabase.storage.from("kyc-documents").remove([idFileName]);
-      return NextResponse.json(
-        { message: "Business document upload failed", error: businessUploadError.message },
-        { status: 500 }
-      );
-    }
-
-    // Store paths (private bucket URLs)
-    const idStoragePath = `kyc-documents/${idFileName}`;
-    const businessStoragePath = `kyc-documents/${businessFileName}`;
-
-    // Update supplier with all verification data
-    await prisma.supplier.update({
-      where: { id: supplierId },
-      data: {
-        // Identity Document
-        kycDocUrl: idStoragePath,
-        kycDocType: idDocType,
-        kycStatus: "PENDING",
-        kycSubmittedAt: new Date(),
-        
-        // Business Document
-        businessDocUrl: businessStoragePath,
-        businessDocType: businessDocType,
-        
-        // Bank Account Details
-        bankName: bankName,
-        accountNumber: accountNumber,
-        accountHolderName: accountHolderName,
-        
-        // Update onboarding step
-        onboardingStep: "KYC_SUBMITTED",
-      },
+    return handleUpload(supabase, dbUser.supplier.id, {
+      idFile, idDocType, businessFile, businessDocType,
+      bankName, bankCode, accountNumber, accountHolderName,
     });
 
-    return NextResponse.json({
-      message: "Verification documents and bank details submitted successfully",
-      success: true,
-    });
   } catch (error: any) {
     console.error("KYC submission error:", error);
     return NextResponse.json(
@@ -152,4 +107,82 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// ── Extracted upload + DB update logic ────────────────────────────────────────
+
+async function handleUpload(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  supplierId: string,
+  fields: {
+    idFile: File;
+    idDocType: string;
+    businessFile: File;
+    businessDocType: string;
+    bankName: string;
+    bankCode: string | null;
+    accountNumber: string;
+    accountHolderName: string;
+  }
+) {
+  const {
+    idFile, idDocType, businessFile, businessDocType,
+    bankName, bankCode, accountNumber, accountHolderName,
+  } = fields;
+
+  // Upload Identity Document
+  const idFileName   = `${supplierId}-id-${Date.now()}-${idFile.name}`;
+  const idFileBuffer = await idFile.arrayBuffer();
+
+  const { error: idUploadError } = await supabase.storage
+    .from("kyc-documents")
+    .upload(idFileName, idFileBuffer, { contentType: idFile.type, upsert: false });
+
+  if (idUploadError) {
+    console.error("ID document upload error:", idUploadError);
+    return NextResponse.json(
+      { message: "Identity document upload failed. Please try again." },
+      { status: 500 }
+    );
+  }
+
+  // Upload Business Document
+  const businessFileName   = `${supplierId}-business-${Date.now()}-${businessFile.name}`;
+  const businessFileBuffer = await businessFile.arrayBuffer();
+
+  const { error: businessUploadError } = await supabase.storage
+    .from("kyc-documents")
+    .upload(businessFileName, businessFileBuffer, { contentType: businessFile.type, upsert: false });
+
+  if (businessUploadError) {
+    console.error("Business document upload error:", businessUploadError);
+    // Clean up the already-uploaded ID doc
+    await supabase.storage.from("kyc-documents").remove([idFileName]);
+    return NextResponse.json(
+      { message: "Business document upload failed. Please try again." },
+      { status: 500 }
+    );
+  }
+
+  // Update supplier record
+  await prisma.supplier.update({
+    where: { id: supplierId },
+    data: {
+      kycDocUrl:          `kyc-documents/${idFileName}`,
+      kycDocType:         idDocType,
+      kycStatus:          "PENDING",
+      kycSubmittedAt:     new Date(),
+      businessDocUrl:     `kyc-documents/${businessFileName}`,
+      businessDocType:    businessDocType,
+      bankName:           bankName,
+      accountNumber:      accountNumber,
+      accountHolderName:  accountHolderName,
+      onboardingStep:     "KYC_SUBMITTED",
+    },
+  });
+
+  return NextResponse.json({
+    message: "Verification documents submitted successfully",
+    success: true,
+  });
 }

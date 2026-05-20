@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { getSupplierProducts } from "@/app/actions/supplier";
 import ProductsClient from "./ProductsClient";
 
@@ -11,6 +12,15 @@ export default async function SupplierProductsPage() {
 
   if (!user) {
     redirect("/auth/login");
+  }
+
+  // Check user role - admins should not access supplier pages
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+  });
+
+  if (dbUser?.role === "ADMIN") {
+    redirect("/admin/dashboard");
   }
 
   const result = await getSupplierProducts();
@@ -25,7 +35,6 @@ export default async function SupplierProductsPage() {
     );
   }
 
-  // Serialize products
   const products = result.products!.map((p: any) => ({
     id: p.id,
     name: p.name,
@@ -37,7 +46,7 @@ export default async function SupplierProductsPage() {
     stock: p.stock,
     isApproved: p.isApproved,
     isActive: p.isActive,
-    deliveryMethod: p.deliveryMethod,
+    deliveryMethod: p.deliveryMethod as "SELF_DELIVERY" | "PLATFORM_LOGISTICS" | "DROPSHIP_HANDLED",
     logisticsFee: p.logisticsFee ? Number(p.logisticsFee) : null,
     createdAt: p.createdAt.toISOString(),
   }));

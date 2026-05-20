@@ -14,13 +14,18 @@ export default async function SupplierDashboardPage() {
   }
 
   const dbUser = await prisma.user.findUnique({
-    where: { email: user.email! },
+    where: { id: user.id },
     include: {
       supplier: {
         include: { products: true },
       },
     },
   });
+
+  // Admins should go to admin dashboard, not supplier dashboard
+  if (dbUser?.role === "ADMIN") {
+    redirect("/admin/dashboard");
+  }
 
   if (!dbUser?.supplier) {
     redirect("/supplier/onboard");
@@ -38,6 +43,12 @@ export default async function SupplierDashboardPage() {
   }
 
   const s = dbUser.supplier;
+
+  // Pending balance (PENDING earnings not yet available)
+  const pendingAgg = await prisma.earningsTransaction.aggregate({
+    where: { supplierId: s.id, status: "PENDING", type: "CREDIT" },
+    _sum: { amount: true },
+  });
 
   // Infer the product type directly from the Prisma result
   type PrismaProduct = (typeof s.products)[number];
@@ -82,5 +93,12 @@ export default async function SupplierDashboardPage() {
     })),
   };
 
-  return <DashboardClient supplier={supplier} productCount={supplier.products.length} />;
+  return <DashboardClient
+    supplier={supplier}
+    productCount={supplier.products.length}
+    walletBalance={Number(s.walletBalance)}
+    pendingBalance={Number(pendingAgg._sum.amount ?? 0)}
+    totalEarned={Number(s.totalEarned)}
+    hasPin={!!s.withdrawalPin}
+  />;
 }

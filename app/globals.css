@@ -3,42 +3,53 @@
 
 /* ─── Vendo Brand Tokens ──────────────────────────────────────────────────── */
 :root {
-  /* Brand */
+  /* Brand — never change with theme */
   --brand-orange: #f97316;
   --brand-orange-hover: #ea6c0a;
   --brand-charcoal: #111827;
   --brand-cream: #fff7ed;
 
-  /* Light mode - Clean and Professional */
-  --background: #ffffff;
-  --surface: #f8fafc;
-  --foreground: #0f172a;
-  --muted: #64748b;
-  --border: #e2e8f0;
+  /* ── Light mode ── clean white + warm stone, orange accents ── */
+  --background: #ffffff;          /* pure white — crisp, premium */
+  --surface: #f8f7f4;             /* very light warm gray — distinct from white */
+  --surface-2: #f1ede8;           /* slightly deeper for tertiary sections */
+  --foreground: #1c1917;          /* warm near-black — strong contrast */
+  --muted: #57534e;               /* warm stone-600 — readable muted text */
+  --border: #e2ddd8;              /* warm gray border — visible but soft */
+  --shadow-color: rgba(28,25,23,0.08);
 
-  /* Shadcn CSS variable bridge */
-  --radius: 0.75rem;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #1c1917;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
+  --popover-foreground: #1c1917;
   --primary: #f97316;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
-  --muted-foreground: #64748b;
-  --accent: #fff7ed;
-  --accent-foreground: #0f172a;
-  --destructive: #ef4444;
+  --secondary: #f8f7f4;
+  --secondary-foreground: #1c1917;
+  --muted-foreground: #57534e;
+  --accent: #fff1e6;              /* warm orange tint — subtle */
+  --accent-foreground: #9a3412;
+  --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --input: #e2e8f0;
+  --input: #e2ddd8;
   --ring: #f97316;
+  --radius: 0.75rem;
+
+  /* Dashboard surface tokens */
+  --dash-surface: #ffffff;
+  --dash-surface-hover: #fef9f5;
+  --dash-border: #e2ddd8;
+  --dash-text: #1c1917;
+  --dash-text-muted: #57534e;
+  --dash-stat-bg: #fef9f5;
+  --dash-stat-border: #fed7aa;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-muted: var(--muted);
   --color-border: var(--border);
   --color-brand-orange: var(--brand-orange);
@@ -48,6 +59,8 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -59,34 +72,56 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* Dark mode — charcoal background, cream text */
+/* ── Dark mode ── deep navy + slate ── */
 .dark {
   --background: #0f172a;
   --surface: #1e293b;
+  --surface-2: #162032;
   --foreground: #f1f5f9;
   --muted: #94a3b8;
   --border: #334155;
+  --shadow-color: rgba(0,0,0,0.4);
+
   --card: #1e293b;
   --card-foreground: #f1f5f9;
   --popover: #1e293b;
   --popover-foreground: #f1f5f9;
   --secondary: #1e293b;
   --secondary-foreground: #f1f5f9;
+  --muted-foreground: #94a3b8;
   --accent: #1e293b;
   --accent-foreground: #f1f5f9;
   --input: #334155;
+
+  --dash-surface: #1e293b;
+  --dash-surface-hover: #263348;
+  --dash-border: #334155;
+  --dash-text: #f1f5f9;
+  --dash-text-muted: #94a3b8;
+  --dash-stat-bg: rgba(255,255,255,0.05);
+  --dash-stat-border: rgba(255,255,255,0.1);
 }
 
-/* Smooth theme transitions */
-* {
-  transition-property: background-color, border-color, color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 200ms;
+/* ── Smooth theme transition ─────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  transition:
+    background-color 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Disable transitions for specific elements */
-button, a, input, textarea, select {
-  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+/* Don't animate things that look wrong when transitioning */
+img, video, svg path, svg circle, svg rect, canvas,
+input, textarea, select,
+[data-no-transition] {
+  transition: none !important;
+}
+
+html {
+  color-scheme: light dark;
 }
 
 body {
@@ -94,4 +129,12 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ── Premium card shadow utility ── */
+.card-shadow {
+  box-shadow: 0 1px 3px var(--shadow-color), 0 4px 16px var(--shadow-color);
+}
+.card-shadow-lg {
+  box-shadow: 0 4px 6px var(--shadow-color), 0 12px 40px var(--shadow-color);
 }

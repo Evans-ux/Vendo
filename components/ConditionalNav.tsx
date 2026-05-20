@@ -9,6 +9,10 @@ const NO_NAV_PREFIXES = [
   "/supplier/onboard",
   "/supplier/terms",
   "/supplier/dashboard",
+  "/supplier/products",
+  "/supplier/orders",
+  "/supplier/wallet",
+  "/supplier/settings",
   "/admin",
 ];
 

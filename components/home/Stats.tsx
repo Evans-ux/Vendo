@@ -4,7 +4,7 @@ import { motion, useInView } from "framer-motion";
 import { useRef, useEffect, useState } from "react";
 
 const STATS = [
-  { value: 25, suffix: "%", label: "Commission on every sale", prefix: "" },
+  { value: 10, suffix: "%", label: "Commission on every sale", prefix: "" },
   { value: 3, suffix: "s", label: "Average AI response time", prefix: "<" },
   { value: 2, suffix: " min", label: "End-to-end order creation", prefix: "<" },
   { value: 100, suffix: "%", label: "Free to start selling", prefix: "" },
@@ -41,7 +41,7 @@ function CountUp({ target, suffix, prefix }: { target: number; suffix: string; p
 
 export default function Stats() {
   return (
-    <section className="py-20 bg-brand-orange/5 border-y border-brand-orange/10">
+    <section className="py-20 bg-surface border-y border-border">
       <div className="max-w-6xl mx-auto px-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
           {STATS.map((stat, i) => (
@@ -56,7 +56,7 @@ export default function Stats() {
               <p className="text-4xl sm:text-5xl font-bold text-brand-orange mb-2">
                 <CountUp target={stat.value} suffix={stat.suffix} prefix={stat.prefix} />
               </p>
-              <p className="text-brand-cream/60 text-sm">{stat.label}</p>
+              <p className="text-muted text-sm font-medium">{stat.label}</p>
             </motion.div>
           ))}
         </div>

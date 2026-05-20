@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { deleteProduct } from "@/app/actions/supplier";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface Product {
   id: string;
@@ -84,7 +83,6 @@ export default function ProductsClient({ products }: { products: Product[] }) {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <ThemeToggle />
               <button
                 onClick={() => router.push("/supplier/dashboard")}
                 className="px-3 py-2 sm:px-4 rounded-lg text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors whitespace-nowrap"

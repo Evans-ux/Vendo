@@ -29,11 +29,11 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
   ];
 
   return (
-    <div className="min-h-screen bg-brand-charcoal flex flex-col items-center justify-center p-4 relative">
+    <div className="relative min-h-screen bg-background flex flex-col items-center py-12 md:py-16 md:justify-center px-2 sm:px-4">
       {/* Background blobs */}
       <div className="absolute inset-0 overflow-hidden z-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-brand-orange/10 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-brand-cream/5 blur-[120px]" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-brand-orange/15 dark:bg-brand-orange/10 blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-brand-orange/10 dark:bg-foreground/5 blur-[120px]" />
       </div>
 
       <div className="w-full max-w-3xl z-10">
@@ -64,8 +64,8 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
             </div>
           </div>
 
-          <h1 className="text-2xl font-bold text-brand-cream mb-1">Join Vendo</h1>
-          <p className="text-brand-cream/60 text-sm">
+          <h1 className="text-2xl font-bold text-foreground mb-1">Join Vendo</h1>
+          <p className="text-muted-foreground text-sm">
             Set up your supplier account. Vee AI will handle selling your products to customers.
           </p>
         </div>
@@ -84,14 +84,14 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
             </div>
           </CardHeader>
 
-          <CardContent className="pt-8 px-4 sm:px-8">
+          <CardContent className="pt-8 px-4 sm:px-8 pb-10">
             <AnimatePresence mode="wait">
               <motion.div
-                key={currentStep}
-                initial={{ opacity: 0, y: 10 }}
+                key={pathname}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
               >
                 {children}
               </motion.div>

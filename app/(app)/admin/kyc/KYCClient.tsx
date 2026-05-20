@@ -161,17 +161,17 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
         processing={processing}
       />
 
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-background">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <header className="bg-card border-b border-border sticky top-0 z-10 shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">KYC Verification</h1>
-              <p className="text-sm text-gray-500 mt-0.5">Review and verify supplier documents</p>
+              <h1 className="text-2xl font-bold text-foreground">KYC Verification</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">Review and verify supplier documents</p>
             </div>
             <button
               onClick={() => router.push("/admin/dashboard")}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
             >
               ← Dashboard
             </button>
@@ -180,44 +180,44 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {suppliers.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-200 p-16 text-center">
+            <div className="bg-card rounded-2xl border border-border p-16 text-center">
               <div className="text-6xl mb-4">🎉</div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">All caught up!</h3>
-              <p className="text-gray-500">No pending KYC verifications right now.</p>
+              <h3 className="text-xl font-semibold text-foreground mb-2">All caught up!</h3>
+              <p className="text-muted-foreground">No pending KYC verifications right now.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
               {/* ── Supplier list ── */}
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                   Pending · {suppliers.length}
                 </p>
                 {suppliers.map((s) => (
                   <button
                     key={s.id}
                     onClick={() => { setSelected(s); setRejectionReason(""); }}
-                    className={`w-full text-left bg-white rounded-xl border p-4 transition-all ${
+                    className={`w-full text-left bg-card rounded-xl border p-4 transition-all ${
                       selected?.id === s.id
                         ? "border-orange-400 shadow-md ring-1 ring-orange-400/30"
-                        : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
+                        : "border-border hover:border-border/80 hover:shadow-sm"
                     }`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div>
-                        <p className="font-semibold text-gray-900">{s.businessName}</p>
-                        <p className="text-sm text-gray-500">{s.user.name}</p>
+                        <p className="font-semibold text-foreground">{s.businessName}</p>
+                        <p className="text-sm text-muted-foreground">{s.user.name}</p>
                       </div>
-                      <span className="px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
+                      <span className="px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
                         Pending
                       </span>
                     </div>
-                    <div className="text-sm text-gray-500 space-y-0.5">
+                    <div className="text-sm text-muted-foreground space-y-0.5">
                       <p>📧 {s.user.email}</p>
                       <p>📱 {s.phone}</p>
                       <p>📍 {s.state || "N/A"} · {s.supplierType === "LOCAL" ? "Local" : "Dropship"}</p>
                       {s.kycSubmittedAt && (
-                        <p className="text-xs text-gray-400 pt-1">
+                        <p className="text-xs text-muted-foreground/70 pt-1">
                           Submitted {new Date(s.kycSubmittedAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
                         </p>
                       )}
@@ -229,16 +229,16 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
               {/* ── Document viewer + actions ── */}
               <div className="lg:sticky lg:top-24 lg:self-start">
                 {selected ? (
-                  <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="bg-card rounded-2xl border border-border overflow-hidden">
                     {/* Supplier header */}
-                    <div className="px-6 py-4 border-b border-gray-100">
-                      <p className="font-semibold text-gray-900">{selected.businessName}</p>
-                      <p className="text-sm text-gray-500">{selected.user.email}</p>
+                    <div className="px-6 py-4 border-b border-border">
+                      <p className="font-semibold text-foreground">{selected.businessName}</p>
+                      <p className="text-sm text-muted-foreground">{selected.user.email}</p>
                     </div>
 
                     {/* Document */}
-                    <div className="px-6 py-4 border-b border-gray-100">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    <div className="px-6 py-4 border-b border-border">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                         {selected.kycDocType || "Document"}
                       </p>
                       {selected.kycDocUrl ? (
@@ -246,29 +246,29 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
                           <img
                             src={selected.kycDocUrl}
                             alt="KYC Document"
-                            className="w-full rounded-lg border border-gray-100"
+                            className="w-full rounded-lg border border-border"
                           />
                         ) : (
-                          <div className="bg-gray-50 rounded-xl p-8 text-center border border-gray-200">
+                          <div className="bg-muted/50 rounded-xl p-8 text-center border border-border">
                             <p className="text-4xl mb-3">📄</p>
-                            <p className="text-sm text-gray-500 mb-4">Preview not available for this file type</p>
+                            <p className="text-sm text-muted-foreground mb-4">Preview not available for this file type</p>
                             <a
                               href={selected.kycDocUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-foreground text-background text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
                             >
                               Open document ↗
                             </a>
                           </div>
                         )
                       ) : (
-                        <p className="text-sm text-gray-400 italic">No document uploaded</p>
+                        <p className="text-sm text-muted-foreground italic">No document uploaded</p>
                       )}
                     </div>
 
                     {/* Business details */}
-                    <div className="px-6 py-4 border-b border-gray-100 grid grid-cols-2 gap-3 text-sm">
+                    <div className="px-6 py-4 border-b border-border grid grid-cols-2 gap-3 text-sm">
                       {[
                         ["Phone", selected.phone],
                         ["State", selected.state || "N/A"],
@@ -276,8 +276,8 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
                         ["Address", selected.address || "N/A"],
                       ].map(([label, value]) => (
                         <div key={label}>
-                          <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-                          <p className="font-medium text-gray-900">{value}</p>
+                          <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+                          <p className="font-medium text-foreground">{value}</p>
                         </div>
                       ))}
                     </div>
@@ -297,7 +297,7 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
                           value={rejectionReason}
                           onChange={(e) => setRejectionReason(e.target.value)}
                           placeholder="Rejection reason — the supplier will see this message"
-                          className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-transparent resize-none outline-none transition"
+                          className="w-full px-4 py-3 text-sm border border-input rounded-xl bg-background text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-red-400 focus:border-transparent resize-none outline-none transition"
                           rows={3}
                         />
                         <button
@@ -311,10 +311,10 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white rounded-2xl border border-gray-200 p-16 text-center">
+                  <div className="bg-card rounded-2xl border border-border p-16 text-center">
                     <p className="text-4xl mb-3">👈</p>
-                    <p className="font-semibold text-gray-900 mb-1">Select a supplier</p>
-                    <p className="text-sm text-gray-400">Click a name on the left to review their documents</p>
+                    <p className="font-semibold text-foreground mb-1">Select a supplier</p>
+                    <p className="text-sm text-muted-foreground">Click a name on the left to review their documents</p>
                   </div>
                 )}
               </div>

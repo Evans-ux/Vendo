@@ -36,14 +36,20 @@ export async function POST(request: NextRequest) {
       const email = record.email
       const fullName = record.raw_user_meta_data?.full_name
 
-      // Insert into users table with retry mechanism
+      // Upsert into users table with retry mechanism
+      // New users should be CUSTOMER (not SUPPLIER) — they only become SUPPLIER after onboarding
       await retryOperation(async () => {
-        await prisma.user.create({
-          data: {
+        await prisma.user.upsert({
+          where: { id: userId },
+          update: {
+            name: fullName,
+            // Don't override role if already set to ADMIN (via makeadmin API)
+          },
+          create: {
             id: userId,
             email: email,
             name: fullName,
-            role: 'SUPPLIER',
+            role: 'CUSTOMER',
           },
         })
       })

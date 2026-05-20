@@ -31,6 +31,12 @@ enum DeliveryMethod {
   DROPSHIP_HANDLED // DROPSHIP suppliers handle everything via API
 }
 
+enum LogisticsProvider {
+  SELF      // supplier handles own waybill
+  SENDBOX   // Vendo-managed Sendbox shipment (LOCAL + PLATFORM_LOGISTICS)
+  CJ        // CJ Dropshipping (DROPSHIP products)
+}
+
 enum KycStatus {
   PENDING // submitted, waiting for admin review
   APPROVED // admin verified the supplier's identity/business
@@ -143,11 +149,26 @@ model Supplier {
   businessDocUrl  String? // Supabase Storage URL for CAC or Bank Statement
   businessDocType String? // "CAC" | "BANK_STATEMENT"
 
-  // Bank Account Details (NEW - Step 3)
-  // Required for payment processing - can be edited later from dashboard
-  bankName          String? // e.g., "GTBank", "Access Bank", "First Bank"
+  // Bank Account Details — Required for payout processing
+  // Verified via Flutterwave account resolution during KYC
+  bankName          String? // e.g., "GTBank", "Access Bank"
+  bankCode          String? // Flutterwave bank code e.g. "058" for GTBank
   accountNumber     String? // 10-digit NUBAN account number
-  accountHolderName String? // Must match business name or owner name
+  accountHolderName String? // Flutterwave-verified account name
+
+  // ── Wallet & Payouts ──────────────────────────────────────────────────────
+  // walletBalance = accumulated earnings not yet withdrawn
+  // Credited when an order is marked DELIVERED (basePrice amount)
+  // Debited when supplier requests a withdrawal
+  walletBalance Decimal @default(0) @db.Decimal(12, 2)
+
+  // withdrawalPin = bcrypt hash of the supplier's 4-digit PIN
+  // Required to authorise any withdrawal request
+  // Null = PIN not yet set (supplier must set it from Settings before withdrawing)
+  withdrawalPin String?
+
+  // totalEarned = lifetime earnings (never decremented — audit trail)
+  totalEarned Decimal @default(0) @db.Decimal(12, 2)
 
   // Onboarding progress — drives the multi-step UI
   // NOT_STARTED → PROFILE_COMPLETE → KYC_SUBMITTED → COMPLETED
@@ -172,6 +193,8 @@ model Supplier {
   // Relations
   user     User      @relation(fields: [userId], references: [id])
   products Product[]
+  earnings EarningsTransaction[]
+  withdrawals WithdrawalRequest[]
 }
 
 // ─────────────────────────────────────────────
@@ -252,6 +275,18 @@ model Order {
   lat             Decimal? @db.Decimal(10, 7) // from Google Maps location share
   lng             Decimal? @db.Decimal(10, 7)
 
+  // Logistics integration
+  // logisticsProvider tells us which system is handling this order's delivery
+  // sendboxShipmentId is the Sendbox shipment reference (for SENDBOX orders)
+  // cjOrderId is the CJ Dropshipping order reference (for CJ orders)
+  // courierName is the human-readable courier name e.g. "GIG Logistics", "DHL"
+  // logisticsStatus is the raw status string from the provider webhook
+  logisticsProvider  LogisticsProvider @default(SELF)
+  sendboxShipmentId  String? // Sendbox shipment ID — used to fetch tracking
+  cjOrderId          String? // CJ order ID — used to poll/receive status
+  courierName        String? // e.g. "GIG Logistics", "Kwik", "DHL"
+  logisticsStatus    String? // raw status from provider: "picked_up", "in_transit" etc.
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -272,4 +307,82 @@ model OrderItem {
   // Relations
   order   Order   @relation(fields: [orderId], references: [id])
   product Product @relation(fields: [productId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// EARNINGS TRANSACTION
+// Immutable ledger entry created when an order is confirmed DELIVERED.
+// type CREDIT = earnings added to wallet (customer confirmed delivery)
+// type DEBIT  = earnings removed from wallet (withdrawal processed)
+// ─────────────────────────────────────────────
+
+enum EarningsType {
+  CREDIT  // order delivered — earnings credited to wallet
+  DEBIT   // withdrawal processed — earnings debited from wallet
+}
+
+enum EarningsStatus {
+  PENDING   // order delivered but 24hr dispute window not yet passed
+  AVAILABLE // cleared — can be withdrawn
+  WITHDRAWN // already paid out via Flutterwave transfer
+}
+
+model EarningsTransaction {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  supplierId String @db.Uuid
+
+  type   EarningsType
+  status EarningsStatus @default(PENDING)
+
+  amount      Decimal @db.Decimal(12, 2) // basePrice amount (after 10% commission deducted)
+  description String  // e.g. "Order #VND-001 delivered"
+
+  // Link back to the order that generated this earning (null for debits)
+  orderId String? @db.Uuid
+
+  // When PENDING → AVAILABLE (24hrs after delivery confirmation)
+  availableAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// WITHDRAWAL REQUEST
+// Created when supplier requests a payout.
+// Flutterwave transfer is initiated on creation.
+// ─────────────────────────────────────────────
+
+enum WithdrawalStatus {
+  PROCESSING  // Flutterwave transfer initiated
+  COMPLETED   // Transfer confirmed successful
+  FAILED      // Transfer failed — wallet balance restored
+}
+
+model WithdrawalRequest {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  supplierId String @db.Uuid
+
+  amount    Decimal          @db.Decimal(12, 2)
+  status    WithdrawalStatus @default(PROCESSING)
+
+  // Flutterwave transfer reference
+  flwTransferId  String? // Flutterwave transfer ID
+  flwReference   String? // our reference sent to Flutterwave
+
+  // Payout destination snapshot (in case supplier changes bank later)
+  bankName          String
+  bankCode          String
+  accountNumber     String
+  accountHolderName String
+
+  failureReason String? // filled if status = FAILED
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  // Relations
+  supplier Supplier @relation(fields: [supplierId], references: [id])
 }

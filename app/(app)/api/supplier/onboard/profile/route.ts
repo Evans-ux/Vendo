@@ -24,14 +24,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upsert the User row (Supabase Auth is the source of truth for identity)
+    // Get or create the User row using Supabase Auth UUID
     let dbUser = await prisma.user.findUnique({
-      where: { email: user.email! },
+      where: { id: user.id }, // Use Supabase Auth UUID
     });
 
     if (!dbUser) {
       dbUser = await prisma.user.create({
         data: {
+          id: user.id, // Use Supabase Auth UUID
           email: user.email!,
           name: user.user_metadata?.full_name || user.user_metadata?.name || null,
           role: "CUSTOMER",

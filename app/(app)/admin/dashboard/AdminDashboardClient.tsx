@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { logout } from "@/app/actions/auth";
+
 
 interface Stats {
   totalSuppliers: number;
@@ -24,7 +26,15 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
     setIsLoggingOut(true);
     try {
       await logout();
-    } catch {
+      // logout() calls redirect(), which will throw
+      // If we reach here, something went wrong
+    } catch (error) {
+      // Re-throw redirect errors - they should not be caught
+      if (error instanceof Error && error.message.includes('NEXT_REDIRECT')) {
+        throw error
+      }
+      // Only handle other unexpected errors
+      console.error('Logout error:', error);
       toast.error("Failed to logout");
       setIsLoggingOut(false);
     }
@@ -105,22 +115,25 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+      <header className="bg-card border-b border-border sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="text-sm text-gray-500 mt-1">Vendo Platform Management</p>
+              <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
+              <p className="text-sm text-muted-foreground mt-1">Vendo Platform Management</p>
             </div>
-            <button
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 transition-colors disabled:opacity-50"
-            >
-              {isLoggingOut ? "Signing out..." : "Sign out"}
-            </button>
+            <div className="flex items-center gap-4">
+              <ThemeToggle />
+              <button
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
+              >
+                {isLoggingOut ? "Signing out..." : "Sign out"}
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -132,19 +145,19 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
             <button
               key={stat.title}
               onClick={() => router.push(stat.link)}
-              className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-shadow text-left"
+              className="bg-card rounded-xl border border-border p-6 hover:shadow-lg transition-shadow text-left"
             >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-3xl">{stat.icon}</span>
                 <span
-                  className={`text-xs font-semibold px-2 py-1 rounded-full bg-${stat.color}-100 text-${stat.color}-700`}
+                  className={`text-xs font-semibold px-2 py-1 rounded-full bg-${stat.color}-100 text-${stat.color}-700 dark:bg-${stat.color}-900/30 dark:text-${stat.color}-300`}
                 >
                   View
                 </span>
               </div>
-              <h3 className="text-sm font-medium text-gray-500 mb-1">{stat.title}</h3>
-              <p className="text-2xl font-bold text-gray-900 mb-1">{stat.value}</p>
-              <p className="text-xs text-gray-500">{stat.subtitle}</p>
+              <h3 className="text-sm font-medium text-muted-foreground mb-1">{stat.title}</h3>
+              <p className="text-2xl font-bold text-foreground mb-1">{stat.value}</p>
+              <p className="text-xs text-muted-foreground">{stat.subtitle}</p>
             </button>
           ))}
         </div>
@@ -199,29 +212,29 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
 
         {/* Quick Actions */}
         <div>
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
+          <h2 className="text-xl font-bold text-foreground mb-4">Quick Actions</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {quickActions.map((action) => (
               <button
                 key={action.title}
                 onClick={() => router.push(action.link)}
-                className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-shadow text-left"
+                className="bg-card rounded-xl border border-border p-6 hover:shadow-lg transition-shadow text-left"
               >
                 <div
-                  className={`w-12 h-12 rounded-lg bg-${action.color}-100 flex items-center justify-center text-2xl mb-4`}
+                  className={`w-12 h-12 rounded-lg bg-${action.color}-100 dark:bg-${action.color}-900/30 flex items-center justify-center text-2xl mb-4`}
                 >
                   {action.icon}
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-1">{action.title}</h3>
-                <p className="text-sm text-gray-500">{action.description}</p>
+                <h3 className="font-semibold text-foreground mb-1">{action.title}</h3>
+                <p className="text-sm text-muted-foreground">{action.description}</p>
               </button>
             ))}
           </div>
         </div>
 
         {/* Navigation Menu */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Management</h2>
+        <div className="bg-card rounded-xl border border-border p-6">
+          <h2 className="text-xl font-bold text-foreground mb-4">Management</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               { label: "Suppliers", link: "/admin/suppliers", icon: "👥" },
@@ -235,10 +248,10 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
               <button
                 key={item.label}
                 onClick={() => router.push(item.link)}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-left"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg border border-border hover:bg-muted/50 transition-colors text-left"
               >
                 <span className="text-2xl">{item.icon}</span>
-                <span className="font-medium text-gray-900">{item.label}</span>
+                <span className="font-medium text-foreground">{item.label}</span>
               </button>
             ))}
           </div>

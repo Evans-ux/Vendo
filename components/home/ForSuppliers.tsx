@@ -13,7 +13,7 @@ const BENEFITS = [
 
 export default function ForSuppliers() {
   return (
-    <section id="suppliers" className="py-24 bg-[#0d1117] px-6">
+    <section id="suppliers" className="py-24 bg-surface-2 dark:bg-surface px-6">
       <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Left */}
@@ -24,27 +24,27 @@ export default function ForSuppliers() {
             transition={{ duration: 0.6 }}
           >
             <span className="text-brand-orange text-sm font-semibold tracking-widest uppercase">For Suppliers</span>
-            <h2 className="text-4xl sm:text-5xl font-bold text-brand-cream mt-3 mb-6">
+            <h2 className="text-4xl sm:text-5xl font-bold text-foreground mt-3 mb-6">
               Your AI-powered storefront. Zero website needed.
             </h2>
-            <p className="text-brand-cream/60 text-lg leading-relaxed mb-8">
+            <p className="text-muted text-lg leading-relaxed mb-8">
               List your products on Vendo and let Vee AI sell them to thousands of customers on Telegram and WhatsApp. No tech skills required.
             </p>
 
-            <div className="space-y-4 mb-10">
+            <div className="space-y-5 mb-10">
               {BENEFITS.map((b, i) => (
                 <motion.div
                   key={b.title}
-                  className="flex items-start gap-4"
+                  className="flex items-start gap-4 p-4 rounded-xl bg-card border border-border card-shadow"
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: i * 0.1 }}
                 >
-                  <span className="text-2xl mt-0.5">{b.icon}</span>
+                  <span className="text-2xl mt-0.5 flex-shrink-0">{b.icon}</span>
                   <div>
-                    <p className="font-semibold text-brand-cream">{b.title}</p>
-                    <p className="text-brand-cream/50 text-sm mt-0.5">{b.desc}</p>
+                    <p className="font-semibold text-foreground text-sm">{b.title}</p>
+                    <p className="text-muted text-sm mt-0.5">{b.desc}</p>
                   </div>
                 </motion.div>
               ))}
@@ -52,7 +52,7 @@ export default function ForSuppliers() {
 
             <Link
               href="/auth/signup"
-              className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-brand-orange hover:bg-brand-orange/90 text-white font-semibold transition-all shadow-lg shadow-brand-orange/30 hover:scale-105"
+              className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-brand-orange hover:bg-brand-orange-hover text-white font-semibold transition-all shadow-lg shadow-brand-orange/30 hover:scale-105"
             >
               Start Selling Free
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -71,24 +71,24 @@ export default function ForSuppliers() {
           >
             {/* Product image */}
             <div className="relative mb-6 flex justify-center">
-              <div className="absolute inset-0 bg-brand-orange/15 blur-[80px] rounded-full" />
+              <div className="absolute inset-0 bg-brand-orange/20 blur-[80px] rounded-full" />
               <Image
                 src="/Vedo-logobag.png"
                 alt="Vendo products"
-                width={280}
-                height={280}
+                width={260}
+                height={260}
                 className="relative z-10 drop-shadow-2xl"
               />
             </div>
 
             {/* Mock dashboard card */}
-            <div className="rounded-2xl border border-white/10 bg-brand-charcoal p-6 shadow-2xl">
+            <div className="rounded-2xl border border-border bg-card card-shadow-lg p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <p className="text-brand-cream font-bold text-sm">Rocybits Fashion</p>
-                  <p className="text-brand-cream/40 text-xs">Local Supplier · Lagos</p>
+                  <p className="text-foreground font-bold text-sm">Rocybits Fashion</p>
+                  <p className="text-muted text-xs">Local Supplier · Lagos</p>
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20">
                   Verified ✓
                 </span>
               </div>
@@ -99,25 +99,28 @@ export default function ForSuppliers() {
                   { label: "Orders", value: "138" },
                   { label: "Revenue", value: "₦2.1M" },
                 ].map((s) => (
-                  <div key={s.label} className="rounded-xl bg-white/5 p-2.5 text-center">
+                  <div key={s.label} className="rounded-xl bg-surface dark:bg-surface p-2.5 text-center border border-border">
                     <p className="text-lg font-bold text-brand-orange">{s.value}</p>
-                    <p className="text-brand-cream/40 text-[10px] mt-0.5">{s.label}</p>
+                    <p className="text-muted text-[10px] mt-0.5 font-medium">{s.label}</p>
                   </div>
                 ))}
               </div>
 
               <div className="space-y-2">
                 {[
-                  { name: "Nike Air Force 1", price: "₦18,500", status: "Live", color: "text-green-400" },
-                  { name: "Ankara Peplum Top", price: "₦8,500", status: "Live", color: "text-green-400" },
-                  { name: "Puma Smash v2", price: "₦14,200", status: "Pending", color: "text-yellow-400" },
+                  { name: "Nike Air Force 1", price: "₦18,500", status: "Live", dot: "bg-green-500" },
+                  { name: "Ankara Peplum Top", price: "₦8,500", status: "Live", dot: "bg-green-500" },
+                  { name: "Puma Smash v2", price: "₦14,200", status: "Pending", dot: "bg-yellow-500" },
                 ].map((p) => (
-                  <div key={p.name} className="flex items-center justify-between py-1.5 border-b border-white/5">
+                  <div key={p.name} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                     <div>
-                      <p className="text-brand-cream text-xs font-medium">{p.name}</p>
-                      <p className="text-brand-orange text-[10px]">{p.price}</p>
+                      <p className="text-foreground text-xs font-semibold">{p.name}</p>
+                      <p className="text-brand-orange text-[10px] font-medium">{p.price}</p>
                     </div>
-                    <span className={`text-[10px] font-medium ${p.color}`}>{p.status}</span>
+                    <span className="flex items-center gap-1.5 text-[10px] font-semibold text-muted">
+                      <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`} />
+                      {p.status}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -125,7 +128,7 @@ export default function ForSuppliers() {
 
             {/* Floating notification */}
             <motion.div
-              className="absolute -top-2 -right-2 bg-brand-orange text-white text-xs font-semibold px-3 py-1.5 rounded-xl shadow-lg shadow-brand-orange/30"
+              className="absolute -top-2 -right-2 bg-brand-orange text-white text-xs font-semibold px-3 py-1.5 rounded-xl shadow-lg shadow-brand-orange/40"
               animate={{ y: [0, -5, 0] }}
               transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
             >

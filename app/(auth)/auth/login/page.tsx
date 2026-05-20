@@ -29,10 +29,28 @@ export default function LoginPage() {
     setIsLoading(true)
     try {
       const result = await login(formData.email, formData.password)
-      if (result?.error) toast.error(result.error)
-    } catch {
-      toast.error('An unexpected error occurred')
-    } finally {
+      // Only reaches here if login() returned without redirecting (i.e. an error)
+      if (result?.error) {
+        toast.error(result.error)
+        setIsLoading(false)
+      }
+      // If login succeeded, redirect() was called server-side — navigation is
+      // already in progress. Keep isLoading=true so the button stays disabled
+      // during the page transition.
+    } catch (error: unknown) {
+      // Next.js redirect() throws a special object — re-throw it so the router
+      // can handle the navigation. Never show it as a toast.
+      if (
+        error != null &&
+        typeof error === 'object' &&
+        'digest' in error &&
+        typeof (error as Record<string, unknown>).digest === 'string' &&
+        ((error as Record<string, unknown>).digest as string).startsWith('NEXT_REDIRECT')
+      ) {
+        throw error
+      }
+      console.error('Login error:', error)
+      toast.error('Something went wrong. Please try again.')
       setIsLoading(false)
     }
   }
@@ -71,13 +89,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-charcoal flex">
+    <div className="min-h-screen bg-background flex">
       {/* ── Left panel — image ── */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#0d1117] flex-col items-center justify-center p-12">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-surface-2 dark:bg-[#0d1117] flex-col items-center justify-center p-12">
         {/* Glow */}
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-[-20%] left-[-20%] w-[500px] h-[500px] rounded-full bg-brand-orange/15 blur-[140px]" />
-          <div className="absolute bottom-[-20%] right-[-20%] w-[400px] h-[400px] rounded-full bg-brand-cream/5 blur-[120px]" />
+          <div className="absolute top-[-20%] left-[-20%] w-[500px] h-[500px] rounded-full bg-brand-orange/20 dark:bg-brand-orange/15 blur-[140px]" />
+          <div className="absolute bottom-[-20%] right-[-20%] w-[400px] h-[400px] rounded-full bg-brand-orange/10 dark:bg-brand-cream/5 blur-[120px]" />
         </div>
 
         <div className="relative z-10 text-center">
@@ -94,8 +112,8 @@ export default function LoginPage() {
             />
           </div>
 
-          <h2 className="text-3xl font-bold text-brand-cream mb-3">Welcome back</h2>
-          <p className="text-brand-cream/50 text-lg max-w-xs mx-auto leading-relaxed">
+          <h2 className="text-3xl font-bold text-foreground dark:text-brand-cream mb-3">Welcome back</h2>
+          <p className="text-muted dark:text-brand-cream/50 text-lg max-w-xs mx-auto leading-relaxed">
             Your AI-powered storefront is waiting. Sign in to manage your products and orders.
           </p>
 
@@ -104,7 +122,7 @@ export default function LoginPage() {
             {[["10%", "Commission"], ["<3s", "AI Response"], ["100%", "Free to start"]].map(([val, label]) => (
               <div key={label} className="text-center">
                 <p className="text-2xl font-bold text-brand-orange">{val}</p>
-                <p className="text-brand-cream/40 text-xs mt-0.5">{label}</p>
+                <p className="text-muted dark:text-brand-cream/40 text-xs mt-0.5">{label}</p>
               </div>
             ))}
           </div>
@@ -119,32 +137,32 @@ export default function LoginPage() {
             <Link href="/">
               <Image src="/vendo-logo.png" alt="Vendo" width={160} height={52} className="h-14 w-auto object-contain" priority />
             </Link>
-            <h1 className="text-3xl font-bold text-white mt-6 mb-1">Sign in</h1>
-            <p className="text-gray-400 text-sm">Enter your credentials to access your supplier dashboard</p>
+            <h1 className="text-3xl font-bold text-foreground mt-6 mb-1">Sign in</h1>
+            <p className="text-muted-foreground text-sm">Enter your credentials to access your supplier dashboard</p>
           </div>
 
-          <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-8">
+          <div className="bg-muted/30 backdrop-blur-xl rounded-2xl border border-border p-8">
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Email Address</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Mail className="w-5 h-5 text-gray-500" />
+                    <Mail className="w-5 h-5 text-muted-foreground" />
                   </div>
                   <input type="email" name="email" value={formData.email} onChange={handleChange} disabled={isLoading} placeholder="you@example.com"
-                    className="w-full pl-12 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50" />
+                    className="w-full pl-12 pr-4 py-3.5 bg-background border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50" />
                 </div>
                 {errors.email && <p className="mt-1.5 text-sm text-red-400">{errors.email}</p>}
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-300">Password</label>
+                  <label className="block text-sm font-medium text-foreground">Password</label>
                   <Link href="/auth/forgot-password" className="text-sm text-brand-orange hover:text-brand-orange/80 transition-colors">Forgot password?</Link>
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock className="w-5 h-5 text-gray-500" />
+                    <Lock className="w-5 h-5 text-muted-foreground" />
                   </div>
                   <input 
                     type={showPassword ? "text" : "password"} 
@@ -153,12 +171,12 @@ export default function LoginPage() {
                     onChange={handleChange} 
                     disabled={isLoading} 
                     placeholder="••••••••"
-                    className="w-full pl-12 pr-12 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50" 
+                    className="w-full pl-12 pr-12 py-3.5 bg-background border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50" 
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-500 hover:text-gray-300 transition-colors"
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -177,7 +195,7 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-6 text-center">
-              <p className="text-gray-400 text-sm">
+              <p className="text-muted-foreground text-sm">
                 Don&apos;t have an account?{' '}
                 <Link href="/auth/signup" className="text-brand-orange hover:text-brand-orange/80 font-semibold transition-colors">Sign up free</Link>
               </p>
@@ -219,14 +237,14 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <p className="text-center text-gray-600 text-xs mt-6">🔒 Protected by industry-standard encryption</p>
+          <p className="text-center text-muted-foreground text-xs mt-6">🔒 Protected by industry-standard encryption</p>
 
           {/* Admin access — signs in and routes based on role */}
           <div className="mt-4 text-center">
             <button
               type="button"
               onClick={handleAdminAccess}
-              className="text-xs text-gray-700 hover:text-gray-500 transition-colors"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               Admin access →
             </button>

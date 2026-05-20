@@ -16,7 +16,7 @@ export default async function AdminKYCPage() {
 
   // Check if user is admin
   const dbUser = await prisma.user.findUnique({
-    where: { email: user.email! },
+    where: { id: user.id },
   });
 
   if (!dbUser || dbUser.role !== "ADMIN") {

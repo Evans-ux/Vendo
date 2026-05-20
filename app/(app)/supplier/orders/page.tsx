@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { getSupplierOrders } from "@/app/actions/supplier";
 import OrdersClient from "./OrdersClient";
 
@@ -17,13 +18,22 @@ export default async function SupplierOrdersPage({
     redirect("/auth/login");
   }
 
+  // Check user role - admins should not access supplier pages
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+  });
+
+  if (dbUser?.role === "ADMIN") {
+    redirect("/admin/dashboard");
+  }
+
   const result = await getSupplierOrders(searchParams.status);
 
   if (!result.success) {
     return (
-      <div className="min-h-screen bg-brand-charcoal flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400">{result.error}</p>
+          <p className="text-destructive">{result.error}</p>
         </div>
       </div>
     );

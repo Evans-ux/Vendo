@@ -10,9 +10,14 @@ export default async function SupplierOnboardingStep1() {
   if (!user) redirect("/auth/login")
 
   const dbUser = await prisma.user.findUnique({
-    where: { email: user.email! },
+    where: { id: user.id },
     include: { supplier: true },
   })
+
+  // Admins should not access supplier onboarding
+  if (dbUser?.role === "ADMIN") {
+    redirect("/admin/dashboard")
+  }
 
   const step = dbUser?.supplier?.onboardingStep
 

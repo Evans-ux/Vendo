@@ -101,11 +101,11 @@ export default function TermsAndConditions() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-charcoal flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative">
       {/* Background glow */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-brand-orange/10 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] rounded-full bg-brand-cream/5 blur-[120px]" />
+      <div className="absolute inset-0 overflow-hidden z-0 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-brand-orange/15 dark:bg-brand-orange/10 blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] rounded-full bg-brand-orange/10 dark:bg-foreground/5 blur-[120px]" />
       </div>
 
       <div className="w-full max-w-3xl z-10">
@@ -121,22 +121,22 @@ export default function TermsAndConditions() {
               <ShieldCheck className="w-8 h-8 text-brand-orange" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-brand-cream mb-2">Terms & Conditions</h1>
-          <p className="text-brand-cream/60">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Terms & Conditions</h1>
+          <p className="text-muted-foreground">
             Please read and accept our supplier agreement before accessing your dashboard.
           </p>
         </motion.div>
 
         {/* Scrollable Terms Box */}
         <motion.div
-          className="bg-background/80 backdrop-blur-md rounded-2xl border border-muted/20 shadow-2xl overflow-hidden mb-6"
+          className="bg-card rounded-2xl border border-border card-shadow overflow-hidden mb-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
         >
           {/* Terms Header */}
-          <div className="px-6 py-4 border-b border-muted/20 bg-muted/10">
-            <p className="text-sm text-muted-foreground">
+          <div className="px-6 py-4 border-b border-border bg-surface">
+            <p className="text-sm text-muted font-medium">
               Vendo Supplier Agreement — Version 1.0 | Rocybits Technology, Onitsha, Anambra, Nigeria
             </p>
           </div>

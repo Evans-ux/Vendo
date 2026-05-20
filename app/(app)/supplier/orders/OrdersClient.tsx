@@ -74,20 +74,20 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
   };
 
   return (
-    <div className="min-h-screen bg-brand-charcoal">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-white/10 bg-brand-charcoal/80 backdrop-blur-md sticky top-0 z-10">
+      <header className="border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-brand-cream">Orders</h1>
-              <p className="text-sm text-brand-cream/50 mt-1">
+              <h1 className="text-2xl font-bold text-foreground">Orders</h1>
+              <p className="text-sm text-muted-foreground mt-1">
                 Manage your orders and deliveries
               </p>
             </div>
             <button
               onClick={() => router.push("/supplier/dashboard")}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-brand-cream/70 hover:text-brand-cream hover:bg-white/5 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
             >
               ← Back to Dashboard
             </button>
@@ -103,7 +103,7 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === "all"
                 ? "bg-brand-orange text-white"
-                : "bg-white/5 text-brand-cream/70 hover:bg-white/10"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted"
             }`}
           >
             All Orders ({orders.length})
@@ -117,7 +117,7 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   filter === status.value
                     ? "bg-brand-orange text-white"
-                    : "bg-white/5 text-brand-cream/70 hover:bg-white/10"
+                    : "bg-muted/50 text-muted-foreground hover:bg-muted"
                 }`}
               >
                 {status.label} ({count})
@@ -128,10 +128,10 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
 
         {/* Orders List */}
         {filteredOrders.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-12 text-center">
+          <div className="rounded-2xl border border-border bg-muted/30 p-12 text-center">
             <div className="text-6xl mb-4">📦</div>
-            <h3 className="text-xl font-semibold text-brand-cream mb-2">No orders yet</h3>
-            <p className="text-brand-cream/50">
+            <h3 className="text-xl font-semibold text-foreground mb-2">No orders yet</h3>
+            <p className="text-muted-foreground">
               {filter === "all"
                 ? "Orders will appear here when customers place them"
                 : `No ${filter.toLowerCase()} orders`}
@@ -146,13 +146,13 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
               return (
                 <div
                   key={order.id}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4"
+                  className="rounded-2xl border border-border bg-card p-6 space-y-4"
                 >
                   {/* Order Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-3">
-                        <h3 className="text-lg font-bold text-brand-cream">
+                        <h3 className="text-lg font-bold text-foreground">
                           #{order.orderNumber}
                         </h3>
                         <span
@@ -161,7 +161,7 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                           {order.status}
                         </span>
                       </div>
-                      <p className="text-sm text-brand-cream/50 mt-1">
+                      <p className="text-sm text-muted-foreground mt-1">
                         Placed on {new Date(order.createdAt).toLocaleDateString("en-NG", {
                           year: "numeric",
                           month: "long",
@@ -175,7 +175,7 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                       <p className="text-2xl font-bold text-brand-orange">
                         ₦{order.totalAmount.toLocaleString()}
                       </p>
-                      <p className="text-xs text-brand-cream/50">
+                      <p className="text-xs text-muted-foreground">
                         {order.paymentStatus === "PAID" ? "✓ Paid" : "Pending Payment"}
                       </p>
                     </div>
@@ -189,39 +189,39 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                   />
 
                   {/* Customer Info */}
-                  <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                    <h4 className="text-sm font-semibold text-brand-cream mb-3">
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
+                    <h4 className="text-sm font-semibold text-foreground mb-3">
                       Customer Information
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                       <div>
-                        <p className="text-brand-cream/50">Name</p>
-                        <p className="text-brand-cream font-medium">{order.user.name}</p>
+                        <p className="text-muted-foreground">Name</p>
+                        <p className="text-foreground font-medium">{order.user.name}</p>
                       </div>
                       <div>
-                        <p className="text-brand-cream/50">Email</p>
-                        <p className="text-brand-cream font-medium">{order.user.email}</p>
+                        <p className="text-muted-foreground">Email</p>
+                        <p className="text-foreground font-medium">{order.user.email}</p>
                       </div>
                       {order.user.phone && (
                         <div>
-                          <p className="text-brand-cream/50">Phone</p>
-                          <p className="text-brand-cream font-medium">{order.user.phone}</p>
+                          <p className="text-muted-foreground">Phone</p>
+                          <p className="text-foreground font-medium">{order.user.phone}</p>
                         </div>
                       )}
                       <div>
-                        <p className="text-brand-cream/50">Shipping Address</p>
-                        <p className="text-brand-cream font-medium">{order.shippingAddress}</p>
+                        <p className="text-muted-foreground">Shipping Address</p>
+                        <p className="text-foreground font-medium">{order.shippingAddress}</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Order Items */}
                   <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-brand-cream">Order Items</h4>
+                    <h4 className="text-sm font-semibold text-foreground">Order Items</h4>
                     {order.items.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center gap-4 rounded-lg border border-white/10 bg-white/5 p-3"
+                        className="flex items-center gap-4 rounded-lg border border-border bg-muted/30 p-3"
                       >
                         {item.product.imageUrls[0] && (
                           <img
@@ -231,8 +231,8 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                           />
                         )}
                         <div className="flex-1">
-                          <p className="font-medium text-brand-cream">{item.product.name}</p>
-                          <p className="text-sm text-brand-cream/50">
+                          <p className="font-medium text-foreground">{item.product.name}</p>
+                          <p className="text-sm text-muted-foreground">
                             Quantity: {item.quantity} × ₦{item.unitPrice.toLocaleString()}
                           </p>
                         </div>
@@ -244,8 +244,8 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                   </div>
 
                   {/* Status Update */}
-                  <div className="flex flex-wrap gap-2 pt-4 border-t border-white/10">
-                    <p className="text-sm text-brand-cream/50 w-full mb-2">Update Status:</p>
+                  <div className="flex flex-wrap gap-2 pt-4 border-t border-border">
+                    <p className="text-sm text-muted-foreground w-full mb-2">Update Status:</p>
                     {STATUS_OPTIONS.filter((s) => s.value !== order.status).map((status) => (
                       <button
                         key={status.value}

@@ -72,13 +72,13 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-charcoal flex">
+    <div className="min-h-screen bg-background flex">
       {/* ── Left panel — image ── */}
-       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#0d1117] flex-col items-center justify-center p-12">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-surface-2 dark:bg-[#0d1117] flex-col items-center justify-center p-12">
             {/* Glow */}
             <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute top-[-20%] left-[-20%] w-[500px] h-[500px] rounded-full bg-brand-orange/15 blur-[140px]" />
-              <div className="absolute bottom-[-20%] right-[-20%] w-[400px] h-[400px] rounded-full bg-brand-cream/5 blur-[120px]" />
+              <div className="absolute top-[-20%] left-[-20%] w-[500px] h-[500px] rounded-full bg-brand-orange/20 dark:bg-brand-orange/15 blur-[140px]" />
+              <div className="absolute bottom-[-20%] right-[-20%] w-[400px] h-[400px] rounded-full bg-brand-orange/10 dark:bg-brand-cream/5 blur-[120px]" />
             </div>
     
             <div className="relative z-10 text-center">
@@ -95,14 +95,14 @@ export default function SignupPage() {
                 />
               </div>
 
-          <h2 className="text-3xl font-bold text-brand-cream mb-3">Start selling today</h2>
-          <p className="text-brand-cream/50 text-lg max-w-xs mx-auto leading-relaxed">
+          <h2 className="text-3xl font-bold text-foreground dark:text-brand-cream mb-3">Start selling today</h2>
+          <p className="text-muted dark:text-brand-cream/50 text-lg max-w-xs mx-auto leading-relaxed">
             Join hundreds of Nigerian suppliers already selling through Vee AI on Telegram and WhatsApp.
           </p>
 
           <div className="mt-10 space-y-3">
-            {["✓ No website needed", "✓ AI handles customer support", "✓ Get paid via Paystack", "✓ Free to join"].map(item => (
-              <p key={item} className="text-brand-cream/60 text-sm">{item}</p>
+            {["✓ No website needed", "✓ AI handles customer support", "✓ Get paid via Flutterwave", "✓ Free to join"].map(item => (
+              <p key={item} className="text-muted dark:text-brand-cream/60 text-sm">{item}</p>
             ))}
           </div>
         </div>
@@ -115,18 +115,18 @@ export default function SignupPage() {
             <Link href="/">
               <Image src="/vendo-logo.png" alt="Vendo" width={160} height={52} className="h-14 w-auto object-contain" priority />
             </Link>
-            <h1 className="text-3xl font-bold text-white mt-6 mb-1">Create account</h1>
-            <p className="text-gray-400 text-sm">Set up your supplier account in minutes</p>
+            <h1 className="text-3xl font-bold text-foreground mt-6 mb-1">Create account</h1>
+            <p className="text-muted-foreground text-sm">Set up your supplier account in minutes</p>
           </div>
 
-          <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-8">
+          <div className="bg-muted/30 backdrop-blur-xl rounded-2xl border border-border p-8">
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Full Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Full Name</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <User className="w-5 h-5 text-gray-500" />
+                    <User className="w-5 h-5 text-muted-foreground" />
                   </div>
                   <input
                     type="text"
@@ -135,7 +135,7 @@ export default function SignupPage() {
                     onChange={handleChange}
                     disabled={isLoading}
                     placeholder="John Doe"
-                    className="w-full pl-12 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50"
+                    className="w-full pl-12 pr-4 py-3.5 bg-background border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50"
                   />
                 </div>
                 {errors.full_name && <p className="mt-1.5 text-sm text-red-400">{errors.full_name}</p>}
@@ -143,10 +143,10 @@ export default function SignupPage() {
 
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+                 <label className="block text-sm font-medium text-foreground mb-2">Email Address</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Mail className="w-5 h-5 text-gray-500" />
+                    <Mail className="w-5 h-5 text-muted-foreground" />
                   </div>
                   <input
                     type="email"
@@ -155,7 +155,7 @@ export default function SignupPage() {
                     onChange={handleChange}
                     disabled={isLoading}
                     placeholder="you@example.com"
-                    className="w-full pl-12 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50"
+                    className="w-full pl-12 pr-4 py-3.5 bg-background border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50"
                   />
                 </div>
                 {errors.email && <p className="mt-1.5 text-sm text-red-400">{errors.email}</p>}
@@ -163,10 +163,10 @@ export default function SignupPage() {
 
               {/* Password */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
+                 <label className="block text-sm font-medium text-foreground mb-2">Password</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock className="w-5 h-5 text-gray-500" />
+                    <Lock className="w-5 h-5 text-muted-foreground" />
                   </div>
                   <input
                     type={showPassword ? "text" : "password"}
@@ -175,12 +175,12 @@ export default function SignupPage() {
                     onChange={handleChange}
                     disabled={isLoading}
                     placeholder="Min. 8 characters"
-                    className="w-full pl-12 pr-12 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50"
+                    className="w-full pl-12 pr-12 py-3.5 bg-background border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-500 hover:text-gray-300 transition-colors"
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -198,10 +198,10 @@ export default function SignupPage() {
 
               {/* Confirm Password */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Confirm Password</label>
+                 <label className="block text-sm font-medium text-foreground mb-2">Confirm Password</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock className="w-5 h-5 text-gray-500" />
+                    <Lock className="w-5 h-5 text-muted-foreground" />
                   </div>
                   <input
                     type={showConfirmPassword ? "text" : "password"}
@@ -210,12 +210,12 @@ export default function SignupPage() {
                     onChange={handleChange}
                     disabled={isLoading}
                     placeholder="••••••••"
-                    className="w-full pl-12 pr-12 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50"
+                    className="w-full pl-12 pr-12 py-3.5 bg-background border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent transition-all disabled:opacity-50"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-500 hover:text-gray-300 transition-colors"
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -251,7 +251,7 @@ export default function SignupPage() {
             </form>
 
             <div className="mt-6 text-center">
-              <p className="text-gray-400 text-sm">
+              <p className="text-muted-foreground text-sm">
                 Already have an account?{' '}
                 <Link href="/auth/login" className="text-brand-orange hover:text-brand-orange/80 font-semibold transition-colors">Sign in</Link>
               </p>
@@ -293,7 +293,7 @@ export default function SignupPage() {
             </button>
           </div>
 
-          <p className="text-center text-gray-600 text-xs mt-6">By signing up, you agree to our Terms of Service and Privacy Policy</p>
+          <p className="text-center text-muted-foreground text-xs mt-6">By signing up, you agree to our Terms of Service and Privacy Policy</p>
         </div>
       </div>
     </div>
