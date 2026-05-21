@@ -1,26 +1,47 @@
-# This is an example configuration file
-# To learn more, see the full config.yaml reference: https://docs.continue.dev/reference
+# Continue Configuration
+# https://docs.continue.dev/reference
 
-name: Example Config
+name: Vendo Config
 version: 1.0.0
 schema: v1
+
+# Auto complete configuration
+autoComplete:
+  enabled: true
+  model: LocalAI
 
 # Define which models can be used
 # https://docs.continue.dev/customization/models
 models:
-  - name: my gpt-5
+  - name: GPT-4 Turbo
     provider: openai
-    model: gpt-5
-    apiKey: ${{ secrets.OPENAI_API_KEY }}
+    model: gpt-4-turbo
+    apiKey: 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
 
-  - uses: ollama/qwen2.5-coder-1.5b
-    with:
-      apiKey: ${{ secrets.OLLAMA_API_KEY }}
-      sshKey: ${{ secrets.SSH_KEY }}
-  
-  - uses: anthropic/claude-4-sonnet
-    with:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  - name: Llama 3.1 70B Groq
+    provider: groq
+    model: llama-3.1-70b-versatile
+    apiKey: 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
+
+  - name: Gemini 1.5 Pro
+    provider: google
+    model: gemini-1.5-pro
+    apiKey: AIzaSyCskR90JdAa8sctGmhHzP1DSeQrcnECH2U
+
+  - name: Gemini 2.0 Flash
+    provider: google
+    model: gemini-2.0-flash
+    apiKey: AIzaSyCskR90JdAa8sctGmhHzP1DSeQrcnECH2U
+
+  - name: Qwen 2.5 Coder (Local)
+    provider: ollama
+    model: qwen2.5-coder:1.5b
+    apiBase: http://localhost:11434
+
+  - name: LocalAI
+    provider: localai
+    model: default
+    apiBase: http://localhost:8080
 
 # MCP Servers that Continue can access
 # https://docs.continue.dev/customization/mcp-tools

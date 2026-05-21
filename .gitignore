@@ -44,3 +44,6 @@ env.local
 next-env.d.ts
 
 /app/generated/prisma
+.continue/
+# ignore .continue directory
+.continue
