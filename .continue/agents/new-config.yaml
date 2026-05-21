@@ -13,7 +13,7 @@ models:
     model: gpt-5
     apiKey: ${{ secrets.OPENAI_API_KEY }}
 
-  - uses: ollama/qwen2.5-coder-7b
+  - uses: ollama/qwen2.5-coder-1.5b
     with:
       apiKey: ${{ secrets.OLLAMA_API_KEY }}
       sshKey: ${{ secrets.SSH_KEY }}
