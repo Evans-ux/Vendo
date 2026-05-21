@@ -46,15 +46,15 @@
 ## 🚀 Deployment Steps
 
 ### Step 1: Verify Environment Variables
-Check `.env.local` has all required keys:
+Check `.env.local` has all required keys (DO NOT commit real keys):
 ```
-TELEGRAM_BOT_TOKEN=8949878809:AAHmS0PQwa3RYURqWWm6W0BemevZ-O45OaQ
-GROQ_API_KEY=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
-GEMINI_API_KEY=AIzaSyD8kZK_J0_hprDxG4IcHkswBm5gfMPmQ7g
-HF_API_KEY=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
-NEXT_PUBLIC_SITE_URL=https://vendo-nu.vercel.app
-NEXT_PUBLIC_SUPABASE_URL=https://hilfcbxcjofxsvaikpar.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_6YtA6V-Z3mIg4XMsRLhkRg_lkT_G4np
+TELEGRAM_BOT_TOKEN=REDACTED_TELEGRAM_BOT_TOKEN
+GROQ_API_KEY=REDACTED_GROQ_API_KEY
+GEMINI_API_KEY=REDACTED_GEMINI_API_KEY
+HF_API_KEY=REDACTED_HF_API_KEY
+NEXT_PUBLIC_SITE_URL=REDACTED_NEXT_PUBLIC_SITE_URL
+NEXT_PUBLIC_SUPABASE_URL=REDACTED_NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=REDACTED_NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ```
 
 ### Step 2: Push to Git
@@ -78,14 +78,14 @@ chmod +x setup-webhook.sh
 
 **Option B: Using curl manually**
 ```bash
-curl -X POST https://api.telegram.org/bot8949878809:AAHmS0PQwa3RYURqWWm6W0BemevZ-O45OaQ/setWebhook \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://vendo-nu.vercel.app/api/telegram"}'
+curl -X POST https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook \
+   -H "Content-Type: application/json" \
+   -d '{"url": "https://vendo-nu.vercel.app/api/telegram"}'
 ```
 
 **Option C: Verify webhook was set**
 ```bash
-curl -X GET https://api.telegram.org/bot8949878809:AAHmS0PQwa3RYURqWWm6W0BemevZ-O45OaQ/getWebhookInfo
+curl -X GET https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo
 ```
 
 ### Step 5: Verify in Telegram

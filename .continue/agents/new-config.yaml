@@ -13,25 +13,26 @@ autoComplete:
 # Define which models can be used
 # https://docs.continue.dev/customization/models
 models:
+
   - name: GPT-4 Turbo
     provider: openai
     model: gpt-4-turbo
-    apiKey: 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
+    apiKey: REDACTED_OPENAI_API_KEY
 
   - name: Llama 3.1 70B Groq
     provider: groq
     model: llama-3.1-70b-versatile
-    apiKey: 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
+    apiKey: REDACTED_GROQ_API_KEY
 
   - name: Gemini 1.5 Pro
     provider: google
     model: gemini-1.5-pro
-    apiKey: AIzaSyCskR90JdAa8sctGmhHzP1DSeQrcnECH2U
+    apiKey: REDACTED_GEMINI_API_KEY
 
   - name: Gemini 2.0 Flash
     provider: google
     model: gemini-2.0-flash
-    apiKey: AIzaSyCskR90JdAa8sctGmhHzP1DSeQrcnECH2U
+    apiKey: REDACTED_GEMINI_API_KEY
 
   - name: Qwen 2.5 Coder (Local)
     provider: ollama

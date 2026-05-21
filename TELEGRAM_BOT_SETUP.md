@@ -13,10 +13,10 @@
 
 ### 2. **Environment Variables Added to `.env.local`**
 ```
-TELEGRAM_BOT_TOKEN=8949878809:AAHmS0PQwa3RYURqWWm6W0BemevZ-O45OaQ
-GROQ_API_KEY=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
-GEMINI_API_KEY=AIzaSyD8kZK_J0_hprDxG4IcHkswBm5gfMPmQ7g
-HF_API_KEY=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
+TELEGRAM_BOT_TOKEN=REDACTED_TELEGRAM_BOT_TOKEN
+GROQ_API_KEY=REDACTED_GROQ_API_KEY
+GEMINI_API_KEY=REDACTED_GEMINI_API_KEY
+HF_API_KEY=REDACTED_HF_API_KEY
 ```
 
 ### 3. **Utility Functions Created**
@@ -43,7 +43,7 @@ HF_API_KEY=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
 ### 1. Set Telegram Webhook
 Run this in your terminal:
 ```bash
-curl -X POST https://api.telegram.org/bot8949878809:AAHmS0PQwa3RYURqWWm6W0BemevZ-O45OaQ/setWebhook \
+curl -X POST https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook \
   -H "Content-Type: application/json" \
   -d '{"url": "https://your-vendo-domain/api/telegram"}'
 ```

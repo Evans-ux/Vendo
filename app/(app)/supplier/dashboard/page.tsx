@@ -11,30 +11,7 @@ export default async function SupplierDashboardPage() {
 
   if (!user) {
     redirect("/auth/login");
-  }/*───
-CJ_API_KEY=CJ5424310@api@a76b3f9b48254fdead6ff0b94528c5ed
-NEXT_PUBLIC_SITE_URL=https://vendo-nu.vercel.appINTERNAL_API_SECRET=vendo_internal_secret_change_in_prod
-
-# ─── Site ────────────────────────────────────────────────────────────────────
-NEXT_PUBLIC_SITE_URL=https://vendo-nu.vercel.app
-
-# ─── Internal secrets ─────────────────────────────────────────────────────────
-# Used by Vee AI bot to confirm deliveries — keep this secret
-INTERNAL_API_SECRET=vendo_internal_secret_change_in_prod
-
-# Used by cron job to release pending earnings
-CRON_SECRET=vendo_cron_secret_change_in_prod
-TELEGRAM_BOT_LINK=8949878809:AAHmS0PQwa3RYURqWWm6W0BemevZ-O45OaQ
-
-You’re my backend dev. I use Prisma and Postgres.
-
-Fix my Supplier and Product setup for production. 
-
-Make it so:
-
-
-OPENAI_API_KEY="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"
-*/
+  }
   const dbUser = await prisma.user.findUnique({
     where: { id: user.id },
     include: {
