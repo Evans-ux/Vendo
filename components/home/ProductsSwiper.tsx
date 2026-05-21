@@ -5,7 +5,7 @@ import { Navigation, Pagination, Autoplay } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
 import "swiper/css/pagination";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { ShoppingBag, Star, Truck } from "lucide-react";
 
 // Mock product data - in production, this would come from an API

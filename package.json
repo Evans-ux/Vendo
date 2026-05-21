@@ -37,13 +37,14 @@
     "sonner": "2.0.7",
     "swiper": "12.1.2",
     "tailwind-merge": "3.5.0",
+    "telegraf": "^4.15.3",
     "zod": "4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4",
     "@types/bcrypt": "6.0.0",
     "@types/multer": "2.1.0",
-    "@types/node": "20",
+    "@types/node": "^20.19.41",
     "@types/pg": "8.20.0",
     "@types/react": "19",
     "@types/react-dom": "19",
