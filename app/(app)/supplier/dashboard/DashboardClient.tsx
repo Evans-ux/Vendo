@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { logout } from "@/app/actions/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Product {
   id: string;
@@ -93,13 +97,13 @@ export default function DashboardClient({ supplier, productCount, walletBalance,
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <button
+              <Button
+                variant="ghost"
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                className="px-3 py-2 sm:px-4 rounded-lg text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 whitespace-nowrap"
               >
                 {isLoggingOut ? "Signing out..." : "Sign out"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
