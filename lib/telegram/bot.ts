@@ -33,6 +33,7 @@ if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_LINK in .env");
 
 // ─── AI Clients ──────────────────────────────────────────────────────────────
 
+// @ts-ignore
 const groq = new Groq({ apiKey: GROQ_KEY });
 const gemini = new GoogleGenerativeAI(GEMINI_KEY);
 const hf = new HfInference(HF_KEY);

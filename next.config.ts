@@ -7,10 +7,13 @@ const nextConfig: NextConfig = {
     config.resolve = config.resolve || {};
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
-      '@': path.resolve(__dirname),
+      "@": path.resolve(__dirname),
+      "@/components": path.resolve(__dirname, "components"),
     };
     return config;
   },
+  // Use default Turbopack; empty config avoids invalid keys
+  turbopack: {},
 };
 
 export default nextConfig;
