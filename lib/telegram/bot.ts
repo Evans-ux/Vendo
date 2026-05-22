@@ -24,12 +24,12 @@ import {
 
 // ─── Environment Variables ───────────────────────────────────────────────────
 
-const TELEGRAM_TOKEN = (process.env.TELEGRAM_BOT_LINK ?? "").trim();
+const TELEGRAM_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const GROQ_KEY = (process.env.GROQ_API ?? "").trim();
 const GEMINI_KEY = (process.env.GEMINI_API ?? "").trim();
 const HF_KEY = (process.env.HUGGING_FACE_API ?? "").trim();
 
-if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_LINK in .env");
+if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env");
 
 // ─── AI Clients ──────────────────────────────────────────────────────────────
 
