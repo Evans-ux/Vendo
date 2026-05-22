@@ -24,7 +24,7 @@ async function runTests() {
   }
 
   // 2. Groq AI
-  const groqKey = process.env.GROQ_API;
+  const groqKey = process.env.GROQ_API || process.env.GROQ_API_KEY;
   if (groqKey) {
     try {
       // @ts-ignore
@@ -43,14 +43,32 @@ async function runTests() {
   }
 
   // 3. Gemini AI
-  const geminiKey = process.env.GEMINI_API;
+  const geminiKey = (process.env.GEMINI_API || process.env.GEMINI_API_KEY || '').trim();
   if (geminiKey) {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
-      // Try gemini-1.5-flash; if 404 occurs, it might require 'gemini-1.5-flash-latest' or a stable version
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const result = await model.generateContent('Respond with "Gemini is active"');
-      console.log(`✅ Gemini AI: SUCCESS - "${result.response.text()}"`);
+      let result;
+      let modelUsed = '';
+      try {
+        // Try without 'models/' prefix first
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); 
+        result = await model.generateContent('Respond with "Gemini 1.5 is active"');
+        modelUsed = 'gemini-1.5-flash';
+      } catch (innerError: any) {
+        if (innerError.message?.includes('404')) {
+          try {
+            // Some projects require the full path in v1beta
+            const model = genAI.getGenerativeModel({ model: 'models/gemini-1.5-flash' });
+            result = await model.generateContent('Respond with "Gemini 1.5 (prefixed) is active"');
+            modelUsed = 'models/gemini-1.5-flash';
+          } catch (fallbackError: any) {
+            throw new Error(`Model not found (404). Current key permissions: ${fallbackError.message}`);
+          }
+        } else {
+          throw innerError;
+        }
+      }
+      console.log(`✅ Gemini AI: SUCCESS - "${result?.response.text()}" (Model: ${modelUsed})`);
     } catch (e: any) {
       console.error(`❌ Gemini AI: Failed. Error: ${e.message}`);
     }
@@ -59,18 +77,19 @@ async function runTests() {
   }
 
   // 4. Hugging Face
-  const hfKey = process.env.HUGGING_FACE_API;
+  const hfKey = (process.env.HF_API_KEY || process.env.HUGGING_FACE_API || '').trim();
   if (hfKey) {
     if (!hfKey.startsWith('hf_')) {
       console.error('❌ Hugging Face: Failed. Token must start with "hf_"');
     } else {
     try {
       const hf = new HfInference(hfKey);
-      // Using chatCompletion (conversational) as required by newer inference providers
+      // Using a very small, stable model to verify connectivity
       const response = await hf.chatCompletion({
-        model: 'mistralai/Mistral-7B-Instruct-v0.2',
+        model: 'HuggingFaceH4/zephyr-7b-beta',
         messages: [{ role: 'user', content: 'Is the API active?' }],
         max_tokens: 10,
+        provider: 'hf-inference'
       });
       console.log('✅ Hugging Face: SUCCESS (Auth verified)');
     } catch (e: any) {
@@ -79,6 +98,33 @@ async function runTests() {
     }
   } else {
     console.warn('⚠️  Hugging Face: HUGGING_FACE_API key is missing.');
+  }
+
+  // 5. Ollama (Local Fallback)
+  const ollamaUrl = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
+  let ollamaKey = (process.env.OLLAMA_API_KEY || "").trim();
+  
+  // Sanitize key: if it contains newlines or spaces, it's likely a misconfiguration
+  if (ollamaKey.includes('\n') || ollamaKey.includes(' ')) {
+    ollamaKey = ollamaKey.split(/[\n\s,]/)[0].replace(/['"]/g, '');
+  }
+
+  try {
+    const response = await fetch(`${ollamaUrl}/api/tags`, {
+      headers: ollamaKey ? { 'Authorization': `Bearer ${ollamaKey.trim()}` } : {}
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      // Determine if it's local or cloud based on URL, or if a key is provided (implies cloud)
+      const type = ollamaKey ? 'Cloud' : (ollamaUrl.includes('127.0.0.1') || ollamaUrl.includes('localhost') ? 'Local' : 'Cloud (custom URL)');
+      console.log(`✅ Ollama: SUCCESS (${type} API active, ${data.models?.length || 0} models found)`);
+    } else {
+      const errText = await response.text();
+      console.warn(`⚠️  Ollama: Service returned status ${response.status}. ${errText}`);
+    }
+  } catch (e: any) {
+    console.error(`❌ Ollama: Failed to connect to ${ollamaUrl}. ${e.message}`);
   }
 
   // 5. Supabase

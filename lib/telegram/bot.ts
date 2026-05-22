@@ -30,6 +30,8 @@ const TELEGRAM_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const GROQ_KEY = (process.env.GROQ_API ?? "").trim();
 const GEMINI_KEY = (process.env.GEMINI_API ?? "").trim();
 const HF_KEY = (process.env.HUGGING_FACE_API ?? "").trim();
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
+const OLLAMA_KEY = process.env.OLLAMA_API_KEY || "";
 
 if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env");
 
@@ -111,14 +113,48 @@ async function chatWithGroq(
     { role: "user", content: contextualMessage }, // the enriched version
   ];
 
-  const completion = await groq.chat.completions.create({
-    messages,
-    model: "llama-3.3-70b-versatile",
-    temperature: 0.7,
-    max_tokens: 1024,
-  });
+  let reply = "";
 
-  const reply = completion.choices[0]?.message?.content ?? "Sorry, I couldn't process that. Try again? 🙏";
+  try {
+    const completion = await groq.chat.completions.create({
+      messages,
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.7,
+      max_tokens: 1024,
+    });
+    reply = completion.choices[0]?.message?.content || "";
+    console.log(`[Groq] Raw response: ${completion.choices?.[0]?.message?.content}`);
+    console.log(`[Groq] Processed reply: ${reply}`);
+  } catch (error) {
+    console.warn("⚠️ Groq failed, falling back to Ollama:", error);
+    
+    try {
+      // Fallback to local Ollama
+      const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(OLLAMA_KEY ? { 'Authorization': `Bearer ${OLLAMA_KEY}` } : {})
+        },
+        body: JSON.stringify({
+          model: 'llama3', 
+          messages,
+          stream: false
+        }),
+      });
+      const data = await response.json();
+      reply = data.message?.content || "";
+      console.log(`[Ollama] Raw response: ${data.message?.content}`);
+      console.log(`[Ollama] Processed reply: ${reply}`);
+    } catch (ollamaError) {
+      console.error("❌ Both Groq and Ollama failed:", ollamaError);
+      reply = "Sorry, both AI services are currently unavailable. Please try again later."; // More specific error
+    }
+  }
+
+  if (!reply) {
+    reply = "Sorry, I couldn't process that. Try again? 🙏 (AI returned empty response)"; // More specific
+  }
 
   // Save assistant reply to history
   pushHistory(telegramId, { role: "assistant", content: reply });
@@ -448,8 +484,10 @@ Powered by Rocybits Technology 🚀`;
 
         // Get AI response from Groq
         const reply = await chatWithGroq(telegramId, userMessage, extraContext);
+        console.log(`[Bot] Final reply from AI for user ${telegramId}: ${reply}`);
 
         await ctx.reply(truncate(reply), { parse_mode: "Markdown" });
+        console.log(`[Bot] Message sent to Telegram for user ${telegramId}`);
 
         // If products were found and the message seems like a product query,
         // send the first product image
@@ -472,9 +510,14 @@ Powered by Rocybits Technology 🚀`;
       });
     } catch (error) {
       console.error("Chat error:", error);
-      await ctx.reply(
-        "😅 Oops, something went wrong on my end. Try again in a moment!"
-      );
+      // Attempt to send a fallback message even if the primary reply failed
+      try {
+        await ctx.reply(
+          "😅 Oops, something went wrong on my end. Try again in a moment! (Error logged)"
+        );
+      } catch (fallbackReplyError) {
+        console.error("❌ Failed to send fallback error message:", fallbackReplyError);
+      }
     }
   });
 
