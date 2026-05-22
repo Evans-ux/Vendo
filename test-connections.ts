@@ -50,16 +50,17 @@ async function runTests() {
       let result;
       let modelUsed = '';
       try {
-        // Using gemini-1.5-flash-latest is more resilient to 404s in v1beta
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' }); 
+        // Try the standard identifier first
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); 
         result = await model.generateContent('Respond with "Gemini 1.5 is active"');
-        modelUsed = 'gemini-1.5-flash-latest';
+        modelUsed = 'gemini-1.5-flash';
       } catch (innerError: any) {
         if (innerError.message?.includes('404')) {
           try {
-            const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-            result = await model.generateContent('Respond with "Gemini 1.5 (prefixed) is active"');
-            modelUsed = 'models/gemini-1.5-flash';
+            // Fallback for some API regions/keys that require gemini-pro or prefixed names
+            const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+            result = await model.generateContent('Respond with "Gemini Latest is active"');
+            modelUsed = 'gemini-1.5-flash-latest';
           } catch (fallbackError: any) {
             throw new Error(`Model not found (404). Current key permissions: ${fallbackError.message}`);
           }
