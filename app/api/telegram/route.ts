@@ -14,26 +14,25 @@ import { HfInference } from "@huggingface/inference";
 //curl -X GET "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook?url=https://YOUR_DOMAIN/api/telegram"
 
 // Store minimal session data in memory (Move to top to avoid hoisting errors)
+// WARNING: In-memory session data will be lost on Vercel cold starts. 
 const userSessions = new Map<string, any>();
 
 // Initialize AI Services
-const GROQ_API_KEY = process.env.GROQ_API_KEY ?? "";
-const GROQ_API_BASE = process.env.GROQ_API_BASE ?? "https://api.groq.ai";
-const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY ?? process.env.OLLAMA_API ?? process.env.OLLAMA_API_KEY_TEST ?? "";
-const OLLAMA_API_URL = process.env.OLLAMA_API_URL ?? "https://api.ollama.com";
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+const GROQ_API_BASE = process.env.GROQ_API_BASE || "https://api.groq.com/openai"; 
 
-const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
-const hf = new HfInference(process.env.HF_API_KEY ?? "");
+const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "BUILD_TIME_PLACEHOLDER");
+const hf = new HfInference(process.env.HF_API_KEY || "");
 
 // Initialize Telegram Bot
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_LINK;
-if (!telegramToken) {
-  throw new Error("Missing TELEGRAM_BOT_TOKEN in env");
-}
-const bot = new Telegraf(telegramToken);
+// Avoid throwing during build; the token will be present at runtime
+const bot = new Telegraf(telegramToken || "BOT_TOKEN_PLACEHOLDER_FOR_BUILD");
 
 /**
  * https://api.telegram.org/bot8949878809:AAHmS0PQwa3RYURqWWm6W0BemevZ-O45OaQ/setWebhook?url=https://vendo-nu.vercel.app/api/telegram
+ * Telegram Webhook registration helper:
+ * https://api.telegram.org/bot<YOUR_TOKEN>/setWebhook?url=https://<YOUR_DOMAIN>/api/telegram
  * Dynamic Site URL resolution
  * Prefers env var, then falls back to current request host
  */
@@ -204,72 +203,10 @@ async function callGroqAPI(payload: Record<string, any>) {
   }
 }
 
-// Try Ollama first (if configured). If it fails, caller should fallback to Groq.
-async function callOllamaAPI(payload: Record<string, any>) {
-  if (!OLLAMA_API_KEY) return null;
-  const base = OLLAMA_API_URL.replace(/\/$/, "");
-  const url = `${base}/v1/chat/completions`;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OLLAMA_API_KEY}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const txt = await res.text();
-      console.warn("Ollama API non-ok response:", res.status, txt);
-      return null;
-    }
-    const json = await res.json();
-    return json;
-  } catch (err: unknown) {
-    const e = err instanceof Error ? err : new Error(String(err));
-    console.warn("Ollama API request failed:", e.message ?? e);
-    return null;
-  }
-}
-
 // High-level AI chat wrapper: prefer Ollama, fallback to Groq
 async function aiChat(userMessage: string, context: Record<string, any> = {}): Promise<string> {
-  // Build payload similar to Groq
-  const contextString = `\nUSER CONTEXT:\n- Telegram ID: ${context.telegramId}\n- Location: ${context.location ? `${context.location.state}, ${context.location.city}` : "Unknown (ask for it)"}\n- Shoe Size: ${context.shoeSize || "Unknown"}\n- Shirt Size: ${context.shirtSize || "Unknown"}\n`;
-  const payload: any = {
-    model: "mixtral-8x7b-32768",
-    messages: [
-      { role: "system", content: VENDO_SYSTEM_PROMPT + "\n" + contextString },
-      { role: "user", content: userMessage },
-    ],
-    temperature: 0.7,
-    max_tokens: 1024,
-  };
-
-  // Try Ollama first
-  const ollamaResp = await callOllamaAPI(payload);
-  const ollamaContent = ollamaResp?.choices?.[0]?.message?.content ?? ollamaResp?.choices?.[0]?.text ?? null;
-  if (ollamaContent) {
-    console.log("aiChat: responded from Ollama");
-    return ollamaContent;
-  }
-
-  // Fallback to Groq
-  try {
-    const groqResp = await groqChat(userMessage, context);
-    console.log("aiChat: responded from Groq fallback");
-    return groqResp;
-  } catch (err: unknown) {
-    const e = err instanceof Error ? err : new Error(String(err));
-    console.error("aiChat: both Ollama and Groq failed", e);
-    return "I'm having trouble thinking right now. Please try again in a moment.";
-  }
-}
-
-async function groqChat(userMessage: string, context: Record<string, any> = {}): Promise<string> {
-  try {
-    // Build context for AI
-    const contextString = `
+  // Build common context string once
+  const contextString = `
 USER CONTEXT:
 - Telegram ID: ${context.telegramId}
 - Location: ${context.location ? `${context.location.state}, ${context.location.city}` : "Unknown (ask for it)"}
@@ -281,31 +218,27 @@ ${JSON.stringify(context.availableSuppliers.slice(0, 5), null, 2)}
 (${context.availableSuppliers.length} total suppliers available)` : "" }
 `;
 
-    const payload: any = {
-      model: "mixtral-8x7b-32768",
-      messages: [
-        {
-          role: "system",
-          content: VENDO_SYSTEM_PROMPT + "\n" + contextString,
-        },
-        {
-          role: "user",
-          content: userMessage,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 1024,
-    };
+  const payload: any = {
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      { role: "system", content: VENDO_SYSTEM_PROMPT + "\n" + contextString },
+      { role: "user", content: userMessage },
+    ],
+    temperature: 0.7,
+    max_tokens: 1024,
+  };
 
+  // Call Groq API
+  try {
     const apiResp = await callGroqAPI(payload);
-    const content =
-      apiResp?.choices?.[0]?.message?.content ??
-      apiResp?.choices?.[0]?.text ??
-      null;
-
-    return content ?? "Sorry, I couldn't process that. Please try again.";
-  } catch (error) {
-    console.error("Groq error:", error);
+    const groqContent = apiResp?.choices?.[0]?.message?.content ?? apiResp?.choices?.[0]?.text ?? null;
+    if (groqContent) {
+      return groqContent;
+    }
+    return "Sorry, I couldn't process that. Please try again.";
+  } catch (err: unknown) {
+    const e = err instanceof Error ? err : new Error(String(err));
+    console.error("aiChat: both Ollama and Groq failed", e);
     return "I'm having trouble thinking right now. Please try again in a moment.";
   }
 }
