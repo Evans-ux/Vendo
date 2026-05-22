@@ -1,10 +1,19 @@
 #!/bin/bash
 
 # Telegram Webhook Setup Script for Vendo Bot
+# Usage: ./setup-webhook.sh [domain]
+# Token should be in TELEGRAM_BOT_TOKEN environment variable
 
-TELEGRAM_BOT_TOKEN="8949878809:AAHmS0PQwa3RYURqWWm6W0BemevZ-O45OaQ"
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 DOMAIN="${1:-vendo-nu.vercel.app}"  # Default to production domain
 WEBHOOK_URL="https://${DOMAIN}/api/telegram"
+
+# Check if token is provided
+if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+  echo "❌ Error: TELEGRAM_BOT_TOKEN environment variable not set"
+  echo "Please set it: export TELEGRAM_BOT_TOKEN='your-token-here'"
+  exit 1
+fi
 
 echo "🔧 Setting up Telegram Webhook for Vendo Bot"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
