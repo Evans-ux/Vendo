@@ -6,6 +6,7 @@ import { searchProducts, extractSearchParams, formatSearchResults, parsePriceRan
 // SECURE PRODUCT SEARCH ENDPOINT
 // Used by Telegram bot to search products without direct DB access
 // ═══════════════════════════════════════════════════════════════════════════
+export const dynamic = 'force-dynamic'; // Ensures this route is not statically optimized at build time
 
 export async function POST(request: NextRequest) {
   try {
