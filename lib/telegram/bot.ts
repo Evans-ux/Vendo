@@ -37,6 +37,10 @@ if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env")
 
 // ─── AI Clients ──────────────────────────────────────────────────────────────
 
+if (!GROQ_KEY) console.warn("⚠️ Groq API Key is missing. Chat features may fail.");
+if (!GEMINI_KEY) console.warn("⚠️ Gemini API Key is missing. Vision features may fail.");
+if (!HF_KEY) console.warn("⚠️ HuggingFace API Key is missing. Image generation may fail.");
+
 // @ts-ignore
 const groq = new Groq({ apiKey: GROQ_KEY });
 const gemini = new GoogleGenerativeAI(GEMINI_KEY);
@@ -80,7 +84,7 @@ async function withTyping<T>(
   action: string,
   fn: () => Promise<T>
 ): Promise<T> {
-  await ctx.sendChatAction(action as any);
+  await ctx.sendChatAction(action as any).catch(() => {});
   // Refresh typing every 4s for long operations
   const interval = setInterval(() => {
     ctx.sendChatAction(action as any).catch(() => {});
@@ -127,6 +131,12 @@ async function chatWithGroq(
     console.log(`[Groq] Processed reply: ${reply}`);
   } catch (error) {
     console.warn("⚠️ Groq failed, falling back to Ollama:", error);
+    
+    // Skip local Ollama fallback in production to avoid timeouts
+    if (process.env.NODE_ENV === "production" && OLLAMA_URL.includes("127.0.0.1")) {
+      reply = "Sorry, my primary AI service is down and I cannot reach my local backup. Please try again in a moment.";
+      return reply;
+    }
     
     try {
       // Fallback to local Ollama
@@ -381,9 +391,9 @@ Powered by Rocybits Technology 🚀`;
       }
 
       const formatted = orders
-        .map((o, i) => {
-          const items = o.items
-            .map((item) => `  • ${item.product.name} (x${item.quantity})`)
+        .map((o:any, i:number) => {
+          const items = (o.items as any[])
+            .map((item: any) => `  • ${item.product.name} (x${item.quantity})`)
             .join("\n");
           const status = o.status.charAt(0) + o.status.slice(1).toLowerCase();
           return `${i + 1}. *Order* — ₦${Number(o.totalAmount).toLocaleString()}\n   Status: ${status} | ${o.paymentStatus}\n${items}`;
