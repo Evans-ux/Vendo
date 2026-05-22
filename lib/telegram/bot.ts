@@ -3,9 +3,11 @@
 
 import { Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
-import Groq from "groq";
+// @ts-ignore
+import Groq from "groq-sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { HfInference } from "@huggingface/inference";
+ 
 
 import {
   VEE_AI_SYSTEM_PROMPT,

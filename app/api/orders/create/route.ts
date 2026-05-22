@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key";
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "placeholder_key_for_build";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     if (!user_id && telegramId) {
       const { data: user } = await supabase
-        .from("users")
+        .from("User") // Standardizing to singular "User" to match Prisma default
         .select("id")
         .eq("telegramId", telegramId)
         .single();
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       if (!user) {
         // Create user if doesn't exist
         const { data: newUser, error: userError } = await supabase
-          .from("users")
+          .from("User")
           .insert({
             telegramId,
             email: `telegram_${telegramId}@vendo.local`,
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     // Get product details
     const { data: product, error: productError } = await supabase
-      .from("products")
+      .from("Product") // Assuming singular based on Prisma convention
       .select(
         `id, name, basePrice, sellingPrice, stock, 
          supplierId, deliveryMethod, logisticsFee, sizes`
@@ -133,14 +133,14 @@ export async function POST(request: NextRequest) {
 
     // Get supplier for logistics info
     const { data: supplier } = await supabase
-      .from("suppliers")
+      .from("Supplier")
       .select("id, supplierType, deliveryMethod")
       .eq("id", product.supplierId)
       .single();
 
     // Create order
     const { data: order, error: orderError } = await supabase
-      .from("orders")
+      .from("Order")
       .insert({
         userId: user_id,
         totalAmount,
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create order items
-    const { error: itemError } = await supabase.from("order_items").insert({
+    const { error: itemError } = await supabase.from("OrderItem").insert({
       orderId: order.id,
       productId,
       quantity,
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
 
     // Reduce product stock
     await supabase
-      .from("products")
+      .from("Product")
       .update({ stock: product.stock - quantity })
       .eq("id", productId);
 
@@ -219,7 +219,7 @@ export async function GET(request: NextRequest) {
 
     if (orderId) {
       const { data: order } = await supabase
-        .from("orders")
+        .from("Order")
         .select("*")
         .eq("id", orderId)
         .single();
@@ -229,7 +229,7 @@ export async function GET(request: NextRequest) {
 
     if (telegramId) {
       const { data: user } = await supabase
-        .from("users")
+        .from("User")
         .select("id")
         .eq("telegramId", telegramId)
         .single();
@@ -239,7 +239,7 @@ export async function GET(request: NextRequest) {
       }
 
       const { data: orders } = await supabase
-        .from("orders")
+        .from("Order")
         .select("*")
         .eq("userId", user.id)
         .order("createdAt", { ascending: false });
