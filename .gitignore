@@ -31,20 +31,33 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-.env.local*
+# env files (NEVER commit - use env.example as template)
+.env
+.env.local
+.env.*.local
 env.local
+env.prod
 
-# vercel
+# Vercel
 .vercel
 
-# typescript
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
 
+# Generated files
 /app/generated/prisma
+
+# Continue IDE configuration (contains secrets)
 .continue/
-# ignore .continue directory
-.continue
-env.local
+
+# Secret files (never commit)
+replacements.txt
+BOT_DEPLOYMENT_GUIDE.md
+TELEGRAM_BOT_SETUP.md
+secrets.json
+new-config.yaml
+
+# Local development
+.DS_Store
+*.log
