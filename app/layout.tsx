@@ -4,6 +4,7 @@ import "./globals.css";
 import ProgressBarProvider from "@/components/ProgressBarProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "sonner";
+import { Analytics } from "@vercel/analytics/next";
 
 
 
@@ -33,6 +34,7 @@ export default function RootLayout({
           {children}
           <Toaster position="top-right" richColors />
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
