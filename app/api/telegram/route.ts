@@ -1,5 +1,6 @@
 // app/api/telegram/route.ts
 import { Telegraf, Context } from "telegraf";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 // import Groq from "groq"; // removed - use HTTP proxy to Groq API instead
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -11,6 +12,10 @@ import { HfInference } from "@huggingface/inference";
 // ═══════════════════════════════════════════════════════════════════════════
 //# set webhook to your deployed domain
 //curl -X GET "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook?url=https://YOUR_DOMAIN/api/telegram"
+
+// Store minimal session data in memory (Move to top to avoid hoisting errors)
+const userSessions = new Map<string, any>();
+
 // Initialize AI Services
 const GROQ_API_KEY = process.env.GROQ_API_KEY ?? "";
 const GROQ_API_BASE = process.env.GROQ_API_BASE ?? "https://api.groq.ai";
@@ -21,13 +26,23 @@ const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 const hf = new HfInference(process.env.HF_API_KEY ?? "");
 
 // Initialize Telegram Bot
-const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_LINK;
 if (!telegramToken) {
   throw new Error("Missing TELEGRAM_BOT_TOKEN in env");
 }
 const bot = new Telegraf(telegramToken);
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://vendo-nu.vercel.app";
+/**
+ * https://api.telegram.org/bot8949878809:AAHmS0PQwa3RYURqWWm6W0BemevZ-O45OaQ/setWebhook?url=https://vendo-nu.vercel.app/api/telegram
+ * Dynamic Site URL resolution
+ * Prefers env var, then falls back to current request host
+ */
+async function getSiteUrl() {
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+  const headerList = await headers();
+  const host = headerList.get("x-forwarded-host") || headerList.get("host");
+  return host ? (host.includes("localhost") ? `http://${host}` : `https://${host}`) : "https://vendo-nu.vercel.app";
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SYSTEM PROMPTS
@@ -118,7 +133,7 @@ Be concise but detailed. Help the customer find matching items.`;
 
 async function ensureUserExists(telegramId: string, username?: string): Promise<string | null> {
   try {
-    const response = await fetch(`${SITE_URL}/api/users/create`, {
+    const response = await fetch(`${await getSiteUrl()}/api/users/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -137,7 +152,7 @@ async function ensureUserExists(telegramId: string, username?: string): Promise<
 
 async function getVerifiedSuppliers() {
   try {
-    const response = await fetch(`${SITE_URL}/api/suppliers/verified`, {
+    const response = await fetch(`${await getSiteUrl()}/api/suppliers/verified`, {
       method: "GET",
     });
     const data = await response.json();
@@ -150,7 +165,7 @@ async function getVerifiedSuppliers() {
 
 async function saveLocation(telegramId: string, lat: number, lng: number, state: string) {
   try {
-    await fetch(`${SITE_URL}/api/users/location`, {
+    await fetch(`${await getSiteUrl()}/api/users/location`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ telegramId, lat, lng, state }),
@@ -443,7 +458,7 @@ bot.on("text", async (ctx: Context) => {
       }
 
       // Call order API
-      const orderResponse = await fetch(`${SITE_URL}/api/orders/create`, {
+      const orderResponse = await fetch(`${await getSiteUrl()}/api/orders/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -488,7 +503,7 @@ bot.on("text", async (ctx: Context) => {
     // Handle order history
     if (userMessage.toLowerCase() === "my orders") {
       const ordersResponse = await fetch(
-        `${SITE_URL}/api/orders/create?telegramId=${telegramId}`,
+        `${await getSiteUrl()}/api/orders/create?telegramId=${telegramId}`,
         { method: "GET" }
       );
       const ordersData = await ordersResponse.json();
@@ -526,7 +541,7 @@ bot.on("text", async (ctx: Context) => {
       shirtSize: session.shirtSize || null,
     };
 
-      const response = await aiChat(userMessage, context);
+    const response = await aiChat(userMessage, context);
 
     // Split long messages
     if (response.length > 4096) {
@@ -631,9 +646,6 @@ bot.catch((err: unknown, ctx: any) => {
 // NEXT.JS ROUTE HANDLER
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Store minimal session data in memory (use Redis for production)
-const userSessions = new Map<string, any>();
-
 export async function POST(req: Request) {
   try {
     const payload = await req.json();
@@ -658,6 +670,13 @@ export async function POST(req: Request) {
     console.error("Webhook error:", error);
     return new Response("Error", { status: 500 });
   }
+}
+
+export async function GET() {
+  return NextResponse.json({ 
+    status: "alive", 
+    message: "Vendo Bot API is active and listening for webhooks."
+  });
 }
 
 export const runtime = "nodejs";
