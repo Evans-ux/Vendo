@@ -50,15 +50,14 @@ async function runTests() {
       let result;
       let modelUsed = '';
       try {
-        // Try without 'models/' prefix first
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); 
+        // Using gemini-1.5-flash-latest is more resilient to 404s in v1beta
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' }); 
         result = await model.generateContent('Respond with "Gemini 1.5 is active"');
-        modelUsed = 'gemini-1.5-flash';
+        modelUsed = 'gemini-1.5-flash-latest';
       } catch (innerError: any) {
         if (innerError.message?.includes('404')) {
           try {
-            // Some projects require the full path in v1beta
-            const model = genAI.getGenerativeModel({ model: 'models/gemini-1.5-flash' });
+            const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
             result = await model.generateContent('Respond with "Gemini 1.5 (prefixed) is active"');
             modelUsed = 'models/gemini-1.5-flash';
           } catch (fallbackError: any) {
@@ -84,9 +83,9 @@ async function runTests() {
     } else {
     try {
       const hf = new HfInference(hfKey);
-      // Using a very small, stable model to verify connectivity
+      // Use mistralai which is the standard for serverless inference testing
       const response = await hf.chatCompletion({
-        model: 'HuggingFaceH4/zephyr-7b-beta',
+        model: 'mistralai/Mistral-7B-Instruct-v0.2',
         messages: [{ role: 'user', content: 'Is the API active?' }],
         max_tokens: 10,
         provider: 'hf-inference'

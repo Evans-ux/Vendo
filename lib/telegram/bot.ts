@@ -165,7 +165,7 @@ async function chatWithGroq(
 // ─── Gemini Vision Analysis ──────────────────────────────────────────────────
 
 async function analyzeImageWithGemini(imageBuffer: Buffer): Promise<string> {
-  const model = gemini.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = gemini.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
   const base64 = imageBuffer.toString("base64");
 
   const result = await model.generateContent([
