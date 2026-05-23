@@ -1,11 +1,12 @@
 // app/api/users/create/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+// The import below is not used and can be removed for clarity
+// import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'; 
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
-
+// Ensures this route is not statically optimized at build time,
+// deferring Supabase client initialization to runtime.
+export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 // CREATE USER ENDPOINT - Called by Telegram AI when user is new
 // ═══════════════════════════════════════════════════════════════════════════
@@ -22,6 +23,15 @@ export interface CreateUserRequest {
 export async function POST(request: NextRequest) {
   try {
     const body: CreateUserRequest = await request.json();
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.");
+      return NextResponse.json({ error: "Server configuration error: Supabase keys are missing." }, { status: 500 });
+    }
+    const supabase = createClient(supabaseUrl, supabaseKey);
     const { telegramId, telegramUsername, name, phone, shoeSize, shirtSize } = body;
 
     // Validate

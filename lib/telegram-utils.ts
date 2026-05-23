@@ -1,10 +1,6 @@
 // lib/telegram-utils.ts
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
-
 // ═══════════════════════════════════════════════════════════════════════════
 // PRODUCT SEARCH
 // ═══════════════════════════════════════════════════════════════════════════
@@ -24,6 +20,15 @@ export async function searchProducts(
   }>
 > {
   try {
+    // Initialize Supabase client inside the function to defer execution to runtime
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in telegram-utils.ts");
+      return []; // Or throw an error, depending on desired behavior
+    }
+    const supabase = createClient(supabaseUrl, supabaseKey);
     const { data, error } = await supabase
       .from("products")
       .select("id, name, description, base_price, image_url, sizes")
@@ -50,6 +55,15 @@ export async function searchProducts(
 
 export async function getUserProfile(telegramUserId: string) {
   try {
+    // Initialize Supabase client inside the function to defer execution to runtime
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in telegram-utils.ts");
+      return null; // Or throw an error
+    }
+    const supabase = createClient(supabaseUrl, supabaseKey);
     const { data, error } = await supabase
       .from("users")
       .select("*")
@@ -69,6 +83,15 @@ export async function updateUserProfile(
   updates: Record<string, any>
 ) {
   try {
+    // Initialize Supabase client inside the function to defer execution to runtime
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in telegram-utils.ts");
+      return false; // Or throw an error
+    }
+    const supabase = createClient(supabaseUrl, supabaseKey);
     const existing = await getUserProfile(telegramUserId);
 
     if (existing) {
@@ -102,6 +125,16 @@ export async function createOrder(
   size: string
 ) {
   try {
+    // Initialize Supabase client inside the function to defer execution to runtime
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in telegram-utils.ts");
+      return { success: false, message: "Server configuration error: Supabase keys are missing." };
+    }
+    
+     const supabase = createClient(supabaseUrl, supabaseKey);
     // Get user
     const user = await getUserProfile(telegramUserId);
     if (!user) {

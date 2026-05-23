@@ -1,11 +1,11 @@
 // app/api/users/location/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'; // Use the server-side client helper
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
-
+// Ensures this route is not statically optimized at build time,
+// deferring Supabase client initialization to runtime.
+export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 // UPDATE USER LOCATION - For location-based supplier selection
 // ═══════════════════════════════════════════════════════════════════════════
@@ -21,6 +21,15 @@ export interface UpdateLocationRequest {
 export async function POST(request: NextRequest) {
   try {
     const body: UpdateLocationRequest = await request.json();
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.");
+      return NextResponse.json({ error: "Server configuration error: Supabase keys are missing." }, { status: 500 });
+    }
+    const supabase = createClient(supabaseUrl, supabaseKey);
     const { telegramId, lat, lng, state, city } = body;
 
     if (!telegramId || lat === undefined || lng === undefined) {

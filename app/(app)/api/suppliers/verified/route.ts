@@ -2,9 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Ensures this route is not statically optimized at build time,
+// deferring Supabase client initialization to runtime.
+export const dynamic = 'force-dynamic';
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GET ALL VERIFIED SUPPLIERS WITH PRODUCTS
@@ -51,6 +52,17 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const category = searchParams.get("category");
     const verified_only = searchParams.get("verified_only") === "true";
+
+    // Initialize Supabase client inside the handler with build-safe placeholders
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.");
+      return NextResponse.json({ error: "Server configuration error: Supabase keys are missing." }, { status: 500 });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Get verified suppliers
     const { data: suppliers, error: suppliersError } = await supabase

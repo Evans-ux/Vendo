@@ -1,10 +1,6 @@
 // lib/product-search.ts
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
-
 // ═══════════════════════════════════════════════════════════════════════════
 // PRICE RANGE PARSER
 // Handles: "56k", "56,000", "50-60k", "50k-60k", "under 100k", "above 30k"
@@ -81,6 +77,10 @@ export interface SupplierScore {
 }
 
 export async function verifySupplier(supplierId: string): Promise<SupplierScore> {
+  // Initialize Supabase client only when needed, at runtime
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build"; 
+  const supabase = createClient(supabaseUrl, supabaseKey);
   try {
     // Get supplier details
     const { data: supplier, error: supplierError } = await supabase
@@ -228,6 +228,10 @@ export async function searchProducts(
   limit: number = 10,
   minVerificationScore: number = 50
 ): Promise<SearchResult[]> {
+  // Initialize Supabase client only when needed, at runtime
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
+  const supabase = createClient(supabaseUrl, supabaseKey);
   try {
     // Get all verified suppliers first
     const { data: suppliers, error: supplierError } = await supabase
