@@ -79,6 +79,16 @@ function truncate(text: string, max = 4000): string {
   return text.substring(0, max) + "\n\n… (truncated)";
 }
 
+/** 
+ * Sanitize AI output for Telegram's legacy Markdown mode.
+ * Converts **bold** to *bold* and escapes underscores (often found in URLs/filenames).
+ */
+function sanitizeMarkdown(text: string): string {
+  return text
+    .replace(/\*\*/g, "*") // Convert standard Markdown **bold** to Telegram *bold*
+    .replace(/_/g, "\\_"); // Escape underscores to prevent unclosed italic entity errors
+}
+
 /** Send a "typing…" indicator while running an async operation */
 async function withTyping<T>(
   ctx: any,
@@ -278,7 +288,7 @@ Powered by Rocybits Technology 🚀`;
         catalog
       );
 
-      await ctx.reply(truncate(reply), { parse_mode: "Markdown" });
+      await ctx.reply(truncate(sanitizeMarkdown(reply)), { parse_mode: "Markdown" });
 
       // Send first product image if available
       if (products.length > 0 && products[0].imageUrls[0]) {
@@ -439,7 +449,7 @@ Powered by Rocybits Technology 🚀`;
         extraContext
       );
 
-      await ctx.reply(truncate(reply), { parse_mode: "Markdown" });
+      await ctx.reply(truncate(sanitizeMarkdown(reply)), { parse_mode: "Markdown" });
 
       // Send matching product images
       for (const product of products.slice(0, 3)) {
@@ -520,7 +530,7 @@ Thanks for shopping with Vendo! 🛍️`;
         const reply = await chatWithGroq(telegramId, userMessage, extraContext);
         console.log(`[Bot] Final reply from AI for user ${telegramId}: ${reply}`);
 
-        await ctx.reply(truncate(reply), { parse_mode: "Markdown" });
+        await ctx.reply(truncate(sanitizeMarkdown(reply)), { parse_mode: "Markdown" });
         console.log(`[Bot] Message sent to Telegram for user ${telegramId}`);
 
         // If products were found and the message seems like a product query,
