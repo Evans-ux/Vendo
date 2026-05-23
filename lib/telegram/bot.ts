@@ -22,6 +22,7 @@ import {
   updateUserSizes,
   formatUserProfileForAI,
   getUserOrders,
+  createOrder,
 } from "./services";
 
 // ─── Environment Variables ───────────────────────────────────────────────────
@@ -175,7 +176,7 @@ async function chatWithGroq(
 // ─── Gemini Vision Analysis ──────────────────────────────────────────────────
 
 async function analyzeImageWithGemini(imageBuffer: Buffer): Promise<string> {
-  const model = gemini.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+  const model = gemini.getGenerativeModel({ model: "gemini-1.5-flash" });
   const base64 = imageBuffer.toString("base64");
 
   const result = await model.generateContent([
@@ -194,25 +195,15 @@ async function analyzeImageWithGemini(imageBuffer: Buffer): Promise<string> {
 // ─── HuggingFace Image Generation ────────────────────────────────────────────
 
 async function generateImage(prompt: string): Promise<Buffer> {
-  const enhancedPrompt = IMAGE_GEN_ENHANCE_PROMPT(prompt);
+  const enhancedPrompt = encodeURIComponent(IMAGE_GEN_ENHANCE_PROMPT(prompt));
+  
+  // Using Pollinations.ai - Reliable, Free, and No Key Required
+  const url = `https://image.pollinations.ai/prompt/${enhancedPrompt}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
 
-  const blob = await hf.textToImage({
-    model: "stabilityai/stable-diffusion-xl-base-1.0",
-    inputs: enhancedPrompt,
-    parameters: {
-      negative_prompt: "ugly, blurry, low quality, distorted, deformed",
-    },
-  });
-  // hf.textToImage may return a Blob-like object or a URL string
-  let arrayBuffer: ArrayBuffer;
-  if (typeof blob === "string") {
-    const resp = await fetch(blob);
-    arrayBuffer = await resp.arrayBuffer();
-  } else if (blob && typeof (blob as any).arrayBuffer === "function") {
-    arrayBuffer = await (blob as any).arrayBuffer();
-  } else {
-    throw new Error("Unexpected response from HuggingFace textToImage");
-  }
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Failed to generate image");
+
+  const arrayBuffer = await response.arrayBuffer();
   return Buffer.from(arrayBuffer);
 }
 
@@ -474,6 +465,39 @@ Powered by Rocybits Technology 🚀`;
   bot.on(message("text"), async (ctx) => {
     const userMessage = ctx.message.text;
     const telegramId = String(ctx.from.id);
+
+    // Detect "Order [ID]" or just a UUID-like Product ID
+    const orderMatch = userMessage.match(/(?:order|buy|get)\s+([a-z0-9-]{20,})/i) || 
+                       (userMessage.length > 20 && userMessage.match(/^[a-z0-9-]{20,}$/i));
+
+    if (orderMatch) {
+      const productId = orderMatch[1] || orderMatch[0];
+      try {
+        await ctx.reply("⏳ Processing your order request...");
+        const order = await createOrder(telegramId, productId);
+        
+        const successMsg = `✅ *Order Placed Successfully!*
+
+Order ID: \`${order.id}\`
+Item: *${(order as any).items[0].product.name}*
+Quantity: *${(order as any).items[0].quantity}*
+Total: *₦${Number(order.totalAmount).toLocaleString()}*
+
+What happens next?
+1. Our team will verify the availability with the supplier.
+2. You will receive a payment link here shortly.
+3. Type /orders to track your status.
+
+Thanks for shopping with Vendo! 🛍️`;
+
+        await ctx.reply(successMsg, { parse_mode: "Markdown" });
+        return;
+      } catch (err: any) {
+        console.error("Order creation failed:", err);
+        await ctx.reply("❌ Sorry, I couldn't process that order. The Product ID might be incorrect or the item is out of stock.");
+        return;
+      }
+    }
 
     try {
       await withTyping(ctx, "typing", async () => {

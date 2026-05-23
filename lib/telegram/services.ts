@@ -16,7 +16,7 @@ export async function searchProducts(query: string, limit = 5) {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, "")
     .split(/\s+/)
-    .filter((w) => w.length > 2);
+    .filter((w) => w.length >= 1); // Allow searching for numeric sizes like "42"
 
   if (keywords.length === 0) {
     // If no usable keywords, return latest products
@@ -122,7 +122,7 @@ export async function getOrCreateUser(
   });
 
   if (!user) {
-    const displayName = [firstName, lastName].filter(Boolean).join(" ") || "Telegram User";
+    const displayName = [firstName, lastName].filter(Boolean).join(" ").trim() || "Telegram User";
     user = await prisma.user.create({
       data: {
         telegramId,
@@ -131,9 +131,57 @@ export async function getOrCreateUser(
         role: "CUSTOMER",
       },
     });
+  } else {
+    // Update name if it has changed on Telegram
+    const currentName = [firstName, lastName].filter(Boolean).join(" ").trim();
+    if (currentName && user.name !== currentName) {
+      user = await prisma.user.update({
+        where: { telegramId },
+        data: {
+          name: currentName,
+        },
+      });
+    }
   }
 
   return user;
+}
+
+/**
+ * Create a new order for a user
+ */
+export async function createOrder(telegramId: string, productId: string) {
+  const user = await getOrCreateUser(telegramId);
+  
+  const product = await prisma.product.findUnique({
+    where: { id: productId }
+  });
+
+  if (!product) throw new Error("Product not found");
+
+  // Create the order with a single item
+  const order = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalAmount: product.sellingPrice,
+      status: "PENDING",
+      paymentStatus: "UNPAID",
+      items: {
+        create: {
+          productId: product.id,
+          quantity: 1,
+          unitPrice: product.sellingPrice,
+        }
+      }
+    },
+    include: {
+      items: {
+        include: { product: true }
+      }
+    }
+  });
+
+  return order;
 }
 
 /**
