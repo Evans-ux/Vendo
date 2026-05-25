@@ -51,10 +51,14 @@ async function runTests() {
       const or = new OpenAI({
         baseURL: "https://openrouter.ai/api/v1",
         apiKey: orKey,
+        defaultHeaders: {
+          "HTTP-Referer": "https://vendo.ng",
+          "X-Title": "Vendo Connection Test",
+        }
       });
       const completion = await or.chat.completions.create({
         messages: [{ role: 'user', content: 'Respond with "OpenRouter is active"' }],
-        model: 'google/gemini-flash-1.5',
+        model: 'google/gemini-2.0-flash-001',
       });
       console.log(`✅ OpenRouter AI: SUCCESS - "${completion.choices?.[0]?.message?.content || 'Connected'}"`);
     } catch (e: any) {
@@ -74,7 +78,7 @@ async function runTests() {
       const hf = new HfInference(hfKey);
       // Test specifically with the FLUX.1-schnell model
       await hf.textToImage({
-        model: 'black-forest-labs/FLUX.1-schnell',
+        model: 'tencent/HunyuanImage-3.0',
         inputs: 'A simple test prompt',
       });
       console.log('✅ Hugging Face: SUCCESS (Auth verified)');

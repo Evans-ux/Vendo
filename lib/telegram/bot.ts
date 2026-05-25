@@ -40,25 +40,6 @@ if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env")
 
 // ─── AI Clients ──────────────────────────────────────────────────────────────
 
-// @ts-ignore
-const groq = new Groq({ apiKey: GROQ_KEY });
-const openRouter = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: OPENROUTER_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": "https://vendo.ng",
-    "X-Title": "Vendo Vee AI",
-  }
-});
-const ollamaCloud = new Ollama({
-  host: OLLAMA_URL,
-  headers: {
-    Authorization: `Bearer ${OLLAMA_KEY}`,
-  },
-});
-
-const hf = new HfInference(HF_KEY);
-
 // ─── Conversation Memory (in-memory, resets on cold start) ──────────────────
 
 interface ChatMessage {
@@ -143,6 +124,11 @@ async function chatWithGroq(
   let reply = "";
 
   try {
+    if (!GROQ_KEY) throw new Error("Missing GROQ_API_KEY");
+    
+    // @ts-ignore
+    const groq = new Groq({ apiKey: GROQ_KEY });
+
     const completion = await groq.chat.completions.create({
       messages,
       model: "llama-3.3-70b-versatile",
@@ -157,6 +143,13 @@ async function chatWithGroq(
     
     try {
       // Fallback using the official Ollama Cloud library
+      const ollamaCloud = new Ollama({
+        host: OLLAMA_URL,
+        headers: {
+          Authorization: `Bearer ${OLLAMA_KEY}`,
+        },
+      });
+
       const response = await ollamaCloud.chat({
         messages: messages as any[],
         model: "llama3", 
@@ -187,8 +180,17 @@ async function analyzeImage(imageBuffer: Buffer): Promise<string> {
   if (!OPENROUTER_KEY) return "Vision analysis is currently unavailable (Missing API Key).";
 
     const base64Image = imageBuffer.toString("base64");
+    const openRouter = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: OPENROUTER_KEY,
+      defaultHeaders: {
+        "HTTP-Referer": "https://vendo.ng",
+        "X-Title": "Vendo Vee AI",
+      }
+    });
+
     const response = await openRouter.chat.completions.create({
-      model: "google/gemini-flash-1.5",
+      model: "google/gemini-2.0-flash-001",
       messages: [
         {
           role: "user",
@@ -210,6 +212,7 @@ async function analyzeImage(imageBuffer: Buffer): Promise<string> {
 async function generateImage(prompt: string): Promise<Buffer> {
   try {
     // Primary: Hugging Face
+    const hf = new HfInference(HF_KEY);
     const response = await hf.textToImage({
       model: "tencent/HunyuanImage-3.0",
       inputs: IMAGE_GEN_ENHANCE_PROMPT(prompt),
