@@ -87,7 +87,7 @@ async function runTests() {
   }
 
   // 5. Ollama Cloud Fallback
-  const ollamaUrl = "https://ollama.com";
+ 
   const ollamaUrl = (process.env.OLLAMA_URL || "https://ollama.com").replace(/\/v1.*$/, "");
   const ollamaKey = (process.env.OLLAMA_API_KEY || "").trim();
 
