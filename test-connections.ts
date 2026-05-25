@@ -61,7 +61,8 @@ async function runTests() {
      
         model: 'openrouter/free',
       });
-      console.log(`✅ OpenRouter AI: SUCCESS - "${completion.choices?.[0]?.message?.content || 'Connected'}"`);
+      const usedModel = completion.model;
+      console.log(`✅ OpenRouter AI: SUCCESS (Routed to: ${usedModel}) - "${completion.choices?.[0]?.message?.content || 'Connected'}"`);
     } catch (e: any) {
       console.error(`❌ OpenRouter AI: Failed. Error: ${e.message}`);
     }

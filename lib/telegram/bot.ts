@@ -179,6 +179,7 @@ async function chatWithGroq(
 async function analyzeImage(imageBuffer: Buffer): Promise<string> {
   if (!OPENROUTER_KEY) return "Vision analysis is currently unavailable (Missing API Key).";
 
+  try {
     const base64Image = imageBuffer.toString("base64");
     const openRouter = new OpenAI({
       baseURL: "https://openrouter.ai/api/v1",
@@ -204,7 +205,13 @@ async function analyzeImage(imageBuffer: Buffer): Promise<string> {
         },
       ],
     });
-    return response.choices[0]?.message?.content || "I couldn't analyze this image.";
+    const content = response.choices[0]?.message?.content;
+    console.log(`[OpenRouter] Model used: ${response.model} | Content received: ${!!content}`);
+    return content || "I couldn't analyze this image.";
+  } catch (error: any) {
+    console.error("❌ OpenRouter Vision Error:", error.message);
+    return "I'm having trouble connecting to the vision service right now.";
+  }
 }
 
 // ─── HuggingFace Image Generation ────────────────────────────────────────────
