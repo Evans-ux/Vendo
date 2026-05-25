@@ -11,6 +11,25 @@ export interface SignupData {
   password: string
 }
 
+/**
+ * Helper to determine where a user should be redirected based on their role and onboarding status.
+ */
+export async function getRedirectPath(role: string, supplier?: any | null) {
+  // Admins go straight to their dashboard
+  if (role === 'ADMIN') return '/admin/dashboard'
+
+  // Support both Prisma (camelCase) and Supabase REST (snake_case)
+  const step = supplier?.onboardingStep || supplier?.onboarding_step;
+
+  if (!supplier || step === 'NOT_STARTED') return '/supplier/onboard'
+  if (step === 'TERMS_ACCEPTED' || step === 'COMPLETED') return '/supplier/dashboard'
+  if (step === 'FIRST_PRODUCT') return '/supplier/onboard/terms'
+  if (step === 'KYC_SUBMITTED') return '/supplier/onboard/products'
+  if (step === 'PROFILE_COMPLETE') return '/supplier/onboard/kyc'
+
+  return '/supplier/onboard'
+}
+
 export async function signup(data: SignupData) {
   const supabase = await createClient()
 
@@ -120,44 +139,16 @@ export async function login(email: string, password: string) {
     }
   }
 
-  // ── Route based on role ──────────────────────────────────────────────────
-  // Admins go straight to their dashboard — they have no supplier profile
-  if (dbUser.role === 'ADMIN') {
-    revalidatePath('/admin/dashboard')
-    redirect('/admin/dashboard')
+  // Use helper to determine redirect
+  try {
+    const path = await getRedirectPath(dbUser.role, dbUser.supplier)
+    revalidatePath(path)
+    redirect(path)
+  } catch (error: any) {
+    // Re-throw redirect errors so Next.js can handle them
+    if (error.digest?.startsWith('NEXT_REDIRECT')) throw error;
+    throw error;
   }
-
-  // ── Route supplier to the correct onboarding step ────────────────────────
-  const step = dbUser.supplier?.onboardingStep
-
-  if (!dbUser.supplier || step === 'NOT_STARTED') {
-    revalidatePath('/supplier/onboard')
-    redirect('/supplier/onboard')
-  }
-
-  if (step === 'TERMS_ACCEPTED' || step === 'COMPLETED') {
-    revalidatePath('/supplier/dashboard')
-    redirect('/supplier/dashboard')
-  }
-
-  if (step === 'FIRST_PRODUCT') {
-    revalidatePath('/supplier/onboard/terms')
-    redirect('/supplier/onboard/terms')
-  }
-
-  if (step === 'KYC_SUBMITTED') {
-    revalidatePath('/supplier/onboard/products')
-    redirect('/supplier/onboard/products')
-  }
-
-  if (step === 'PROFILE_COMPLETE') {
-    revalidatePath('/supplier/onboard/kyc')
-    redirect('/supplier/onboard/kyc')
-  }
-
-  // Fallback — should never reach here but just in case
-  revalidatePath('/supplier/onboard')
-  redirect('/supplier/onboard')
 }
 
 export async function logout() {
@@ -182,10 +173,11 @@ export async function getUser() {
 // OAuth Login with Google
 export async function signInWithGoogle() {
   const supabase = await createClient()
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://vendo-nu.vercel.app'
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `https://vendo-nu.vercel.app/auth/callback`,
+      redirectTo: `${siteUrl}/auth/callback`,
     },
   })
 
@@ -193,14 +185,17 @@ export async function signInWithGoogle() {
     return { error: error.message }
   }
 
-  return { url: data.url }
+  if (data.url) {
+    redirect(data.url)
+  }
 }
 
 // Forgot Password - Send reset email
 export async function forgotPassword(email: string) {
   const supabase = await createClient()
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://vendo-nu.vercel.app'
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `https://vendo-nu.vercel.app/auth/reset-password`,
+    redirectTo: `${siteUrl}/auth/reset-password`,
   })
 
   if (error) {

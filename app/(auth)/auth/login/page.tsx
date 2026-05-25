@@ -75,15 +75,25 @@ export default function LoginPage() {
     setIsGoogleLoading(true)
     try {
       const result = await signInWithGoogle()
+      // Only reaches here if signInWithGoogle returned an error object instead of redirecting
       if (result?.error) {
         toast.error(result.error)
-      } else if (result?.url) {
-        // Redirect to Google OAuth
-        window.location.href = result.url
+        setIsGoogleLoading(false)
       }
-    } catch {
+    } catch (error: unknown) {
+      // Next.js redirect() throws a special error object - we must re-throw it 
+      // so the framework can handle the transition.
+      if (
+        error != null &&
+        typeof error === 'object' &&
+        'digest' in error &&
+        typeof (error as Record<string, unknown>).digest === 'string' &&
+        ((error as Record<string, unknown>).digest as string).startsWith('NEXT_REDIRECT')
+      ) {
+        throw error
+      }
+      console.error('Google sign in error:', error)
       toast.error('Failed to sign in with Google')
-    } finally {
       setIsGoogleLoading(false)
     }
   }

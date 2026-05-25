@@ -239,7 +239,7 @@ model Product {
   logisticsFee Decimal? @db.Decimal(10, 2)
 
   // Admin must approve before product appears in Telegram bot search
-  isApproved Boolean @default(false)
+  isApproved Boolean @default(true)
 
   // Supplier can toggle this off to temporarily hide a product
   isActive Boolean @default(true)

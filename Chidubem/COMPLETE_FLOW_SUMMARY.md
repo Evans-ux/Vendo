@@ -46,14 +46,21 @@
 6. Session exchanged
    ↓
 7. Redirected to /auth/login
+7. **If Email Verification:** Redirected to `/auth/login` with a success message. User then logs in.
+   **If OAuth (e.g., Google):** User is already logged in.
    ↓
 8. User logs in
+8. **If Email Verification (after login):** Check if user has supplier record.
+   **If OAuth (directly after callback):** Check if user has supplier record.
    ↓
 9. Check if user has supplier record
    ↓
 10. If NO supplier → /supplier/onboard
 11. If supplier.onboardingStep !== COMPLETED → /supplier/onboard
 12. If supplier.onboardingStep === COMPLETED → /supplier/dashboard
+9. If NO supplier → `/supplier/onboard`
+10. If supplier.onboardingStep !== COMPLETED → `/supplier/onboard`
+11. If supplier.onboardingStep === COMPLETED → `/supplier/dashboard`
 ```
 
 ## Next Steps:

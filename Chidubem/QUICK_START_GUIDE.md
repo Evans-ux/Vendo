@@ -59,7 +59,7 @@ bun run dev
    - **Events:** Check only **INSERT**
    - **Type:** `HTTP Request`
    - **Method:** `POST`
-   - **URL:** `http://localhost:3000/api/webhooks/supabase`
+   - **URL:** `https://vendo-nu.vercel.app/api/webhooks/supabase`
    - **HTTP Headers:**
      ```
      Content-Type: application/json
@@ -72,7 +72,7 @@ bun run dev
 
 ### Test 1: Create Supplier Account
 
-1. Go to: `http://localhost:3000/auth/signup`
+1. Go to: `https://vendo-nu.vercel.app/auth/signup`
 2. Fill in:
    - Full Name: `Test Supplier`
    - Email: `supplier@test.com`
@@ -103,24 +103,24 @@ bun run dev
 6. Save
 
 **Then access admin:**
-1. Go to: `http://localhost:3000/admin/dashboard`
+1. Go to: `https://vendo-nu.vercel.app/admin/dashboard`
 2. You should see the admin dashboard
 
 ### Test 4: Admin Actions
 
 **Verify KYC:**
-1. Go to: `http://localhost:3000/admin/kyc`
+1. Go to: `https://vendo-nu.vercel.app/admin/kyc`
 2. You should see the test supplier
 3. Click on them to view documents
 4. Click **Approve KYC**
 
 **Approve Products:**
-1. Go to: `http://localhost:3000/admin/products`
+1. Go to: `https://vendo-nu.vercel.app/admin/products`
 2. You should see pending products
 3. Click **Approve** on a product
 
 **Manage Suppliers:**
-1. Go to: `http://localhost:3000/admin/suppliers`
+1. Go to: `https://vendo-nu.vercel.app/admin/suppliers`
 2. View all suppliers
 3. Try activating/deactivating
 
