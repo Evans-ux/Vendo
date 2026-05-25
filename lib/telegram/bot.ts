@@ -5,8 +5,9 @@ import { Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
 // @ts-ignore
 import Groq from "groq-sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { Ollama } from "ollama";
 import { HfInference } from "@huggingface/inference";
+import OpenAI from "openai";
  
 
 import {
@@ -23,28 +24,39 @@ import {
   formatUserProfileForAI,
   getUserOrders,
   createOrder,
+  updateUserLocation
 } from "./services";
 
 // ─── Environment Variables ───────────────────────────────────────────────────
 
 const TELEGRAM_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const GROQ_KEY = (process.env.GROQ_API ?? "").trim();
-const GEMINI_KEY = (process.env.GEMINI_API ?? "").trim();
 const HF_KEY = (process.env.HUGGING_FACE_API ?? "").trim();
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
+const OLLAMA_URL = "https://ollama.com";
 const OLLAMA_KEY = process.env.OLLAMA_API_KEY || "";
+const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEY || "").trim();
 
 if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env");
 
 // ─── AI Clients ──────────────────────────────────────────────────────────────
 
-if (!GROQ_KEY) console.warn("⚠️ Groq API Key is missing. Chat features may fail.");
-if (!GEMINI_KEY) console.warn("⚠️ Gemini API Key is missing. Vision features may fail.");
-if (!HF_KEY) console.warn("⚠️ HuggingFace API Key is missing. Image generation may fail.");
-
 // @ts-ignore
 const groq = new Groq({ apiKey: GROQ_KEY });
-const gemini = new GoogleGenerativeAI(GEMINI_KEY);
+const openRouter = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: OPENROUTER_KEY,
+  defaultHeaders: {
+    "HTTP-Referer": "https://vendo.ng",
+    "X-Title": "Vendo Vee AI",
+  }
+});
+const ollamaCloud = new Ollama({
+  host: OLLAMA_URL,
+  headers: {
+    Authorization: `Bearer ${OLLAMA_KEY}`,
+  },
+});
+
 const hf = new HfInference(HF_KEY);
 
 // ─── Conversation Memory (in-memory, resets on cold start) ──────────────────
@@ -143,29 +155,15 @@ async function chatWithGroq(
   } catch (error) {
     console.warn("⚠️ Groq failed, falling back to Ollama:", error);
     
-    // Skip local Ollama fallback in production to avoid timeouts
-    if (process.env.NODE_ENV === "production" && OLLAMA_URL.includes("127.0.0.1")) {
-      reply = "Sorry, my primary AI service is down and I cannot reach my local backup. Please try again in a moment.";
-      return reply;
-    }
-    
     try {
-      // Fallback to local Ollama
-      const response = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(OLLAMA_KEY ? { 'Authorization': `Bearer ${OLLAMA_KEY}` } : {})
-        },
-        body: JSON.stringify({
-          model: 'llama3', 
-          messages,
-          stream: false
-        }),
+      // Fallback using the official Ollama Cloud library
+      const response = await ollamaCloud.chat({
+        messages: messages as any[],
+        model: "llama3", 
       });
-      const data = await response.json();
-      reply = data.message?.content || "";
-      console.log(`[Ollama] Raw response: ${data.message?.content}`);
+      
+      reply = response.message.content || "";
+      console.log(`[Ollama] Raw response: ${reply}`);
       console.log(`[Ollama] Processed reply: ${reply}`);
     } catch (ollamaError) {
       console.error("❌ Both Groq and Ollama failed:", ollamaError);
@@ -185,36 +183,48 @@ async function chatWithGroq(
 
 // ─── Gemini Vision Analysis ──────────────────────────────────────────────────
 
-async function analyzeImageWithGemini(imageBuffer: Buffer): Promise<string> {
-  const model = gemini.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const base64 = imageBuffer.toString("base64");
+async function analyzeImage(imageBuffer: Buffer): Promise<string> {
+  if (!OPENROUTER_KEY) return "Vision analysis is currently unavailable (Missing API Key).";
 
-  const result = await model.generateContent([
-    GEMINI_VISION_PROMPT,
-    {
-      inlineData: {
-        data: base64,
-        mimeType: "image/jpeg",
-      },
-    },
-  ]);
-
-  return result.response?.text() ?? "I couldn't analyze this image.";
+    const base64Image = imageBuffer.toString("base64");
+    const response = await openRouter.chat.completions.create({
+      model: "google/gemini-flash-1.5",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: GEMINI_VISION_PROMPT },
+            {
+              type: "image_url",
+              image_url: { url: `data:image/jpeg;base64,${base64Image}` },
+            },
+          ],
+        },
+      ],
+    });
+    return response.choices[0]?.message?.content || "I couldn't analyze this image.";
 }
 
 // ─── HuggingFace Image Generation ────────────────────────────────────────────
 
 async function generateImage(prompt: string): Promise<Buffer> {
-  const enhancedPrompt = encodeURIComponent(IMAGE_GEN_ENHANCE_PROMPT(prompt));
-  
-  // Using Pollinations.ai - Reliable, Free, and No Key Required
-  const url = `https://image.pollinations.ai/prompt/${enhancedPrompt}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
-
-  const response = await fetch(url);
-  if (!response.ok) throw new Error("Failed to generate image");
-
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  try {
+    // Primary: Hugging Face
+    const response = await hf.textToImage({
+      model: "black-forest-labs/FLUX.1-schnell",
+      inputs: IMAGE_GEN_ENHANCE_PROMPT(prompt),
+    });
+    return Buffer.from(await response.arrayBuffer());
+  } catch (error: any) {
+    console.warn("⚠️ Hugging Face image gen failed (likely quota), falling back to Pollinations:", error.message);
+    
+    // Fallback: Pollinations.ai (No credits/key required)
+    const enhancedPrompt = encodeURIComponent(IMAGE_GEN_ENHANCE_PROMPT(prompt));
+    const url = `https://image.pollinations.ai/prompt/${enhancedPrompt}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Both HF and Pollinations failed to generate image");
+    return Buffer.from(await response.arrayBuffer());
+  }
 }
 
 // ─── Bot Setup ───────────────────────────────────────────────────────────────
@@ -424,9 +434,9 @@ Powered by Rocybits Technology 🚀`;
         return Buffer.from(await response.arrayBuffer());
       });
 
-      // Step 1: Analyze with Gemini
+      // Step 1: Analyze with OpenRouter/Gemini
       const analysis = await withTyping(ctx, "typing", () =>
-        analyzeImageWithGemini(imageBuffer)
+        analyzeImage(imageBuffer)
       );
 
       // Step 2: Search for matching products using the analysis
@@ -471,27 +481,60 @@ Powered by Rocybits Technology 🚀`;
     }
   });
 
+  // ── Location handler — Save delivery coordinates ───────────────────────
+  bot.on(message("location"), async (ctx) => {
+    const { latitude, longitude } = ctx.message.location;
+    await withTyping(ctx, "typing", async () => {
+      try {
+        await updateUserLocation(String(ctx.from.id), latitude, longitude);
+        await ctx.reply(
+          "📍 *Location Saved!*\n\nI've updated your profile with your delivery coordinates. This helps me find suppliers closer to you! 🚚",
+          { parse_mode: "Markdown" }
+        );
+      } catch (error) {
+        console.error("Location save error:", error);
+        await ctx.reply("😅 I couldn't save your location profile. Please try again later.");
+      }
+    });
+  });
+
   // ── Text message handler — Main Groq chat with product search ──────────
   bot.on(message("text"), async (ctx) => {
     const userMessage = ctx.message.text;
     const telegramId = String(ctx.from.id);
 
-    // Detect "Order [ID]" or just a UUID-like Product ID
-    const orderMatch = userMessage.match(/(?:order|buy|get)\s+([a-z0-9-]{20,})/i) || 
-                       (userMessage.length > 20 && userMessage.match(/^[a-z0-9-]{20,}$/i));
+    // Detect "Order [ID] [Phone] [Address]" or variations
+    const orderMatch = userMessage.match(/(?:order|buy|get)\s+([a-z0-9-]{20,})(?:\s+([\d+]{10,}))?(?:\s+(?:at|to|address)\s+(.+))?/i);
+    const idOnlyMatch = !orderMatch && userMessage.length > 20 && userMessage.match(/^[a-z0-9-]{20,}$/i);
 
-    if (orderMatch) {
-      const productId = orderMatch[1] || orderMatch[0];
+    if (orderMatch || idOnlyMatch) {
+      const productId = orderMatch ? orderMatch[1] : userMessage.trim();
+      const phone = orderMatch?.[2];
+      const address = orderMatch?.[3];
+
+      if (!phone || !address) {
+        await ctx.reply(
+          "📦 *Almost there!* To process your order, I need your phone number and delivery address.\n\n" +
+          "Please reply in this format:\n" +
+          `\`order ${productId} [phone] at [address]\`\n\n` +
+          "Example:\n" +
+          `\`order ${productId} 08012345678 at 123 Awka Road, Onitsha\``,
+          { parse_mode: "Markdown" }
+        );
+        return;
+      }
+
       try {
         await ctx.reply("⏳ Processing your order request...");
-        const order = await createOrder(telegramId, productId);
+        const order = await createOrder(telegramId, productId, phone, address);
         
         const successMsg = `✅ *Order Placed Successfully!*
 
 Order ID: \`${order.id}\`
 Item: *${(order as any).items[0].product.name}*
-Quantity: *${(order as any).items[0].quantity}*
 Total: *₦${Number(order.totalAmount).toLocaleString()}*
+Phone: *${phone}*
+Delivery to: *${address}*
 
 What happens next?
 1. Our team will verify the availability with the supplier.

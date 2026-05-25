@@ -171,7 +171,7 @@ export async function getUser() {
 }
 
 // OAuth Login with Google
-export async function signInWithGoogle() {
+export async function signInWithGoogle(): Promise<{ error?: string; url?: string }> {
   const supabase = await createClient()
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://vendo-nu.vercel.app'
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -184,10 +184,7 @@ export async function signInWithGoogle() {
   if (error) {
     return { error: error.message }
   }
-
-  if (data.url) {
-    redirect(data.url)
-  }
+  return { url: data.url }
 }
 
 // Forgot Password - Send reset email

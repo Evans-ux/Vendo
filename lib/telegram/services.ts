@@ -150,7 +150,12 @@ export async function getOrCreateUser(
 /**
  * Create a new order for a user
  */
-export async function createOrder(telegramId: string, productId: string) {
+export async function createOrder(
+  telegramId: string, 
+  productId: string, 
+  phone?: string, 
+  address?: string
+) {
   const user = await getOrCreateUser(telegramId);
   
   const product = await prisma.product.findUnique({
@@ -166,6 +171,8 @@ export async function createOrder(telegramId: string, productId: string) {
       totalAmount: product.sellingPrice,
       status: "PENDING",
       paymentStatus: "UNPAID",
+      customerPhone: phone || null,
+      deliveryAddress: address || null,
       items: {
         create: {
           productId: product.id,
@@ -182,6 +189,23 @@ export async function createOrder(telegramId: string, productId: string) {
   });
 
   return order;
+}
+
+/**
+ * Update user location coordinates
+ */
+export async function updateUserLocation(
+  telegramId: string,
+  lat: number,
+  lng: number
+) {
+  return prisma.user.update({
+    where: { telegramId },
+    data: {
+      lat: lat.toString(),
+      lng: lng.toString(),
+    },
+  });
 }
 
 /**
@@ -208,10 +232,16 @@ export function formatUserProfileForAI(user: {
   name: string | null;
   shoeSize: string | null;
   shirtSize: string | null;
+  phone?: string | null;
+  lat?: any;
+  lng?: any;
 }): string {
   const parts = [`Customer: ${user.name || "Unknown"}`];
   if (user.shoeSize) parts.push(`Shoe size: ${user.shoeSize}`);
   if (user.shirtSize) parts.push(`Shirt size: ${user.shirtSize}`);
+  if (user.phone) parts.push(`Phone: ${user.phone}`);
+  if (user.lat && user.lng) parts.push(`Delivery Location: Set (GPS Coordinates)`);
+  
   if (!user.shoeSize && !user.shirtSize) {
     parts.push("(No sizes saved — suggest /mysize)");
   }
