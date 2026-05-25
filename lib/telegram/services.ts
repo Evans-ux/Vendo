@@ -171,7 +171,6 @@ export async function createOrder(
       totalAmount: product.sellingPrice,
       status: "PENDING",
       paymentStatus: "UNPAID",
-      customerPhone: phone || null,
       deliveryAddress: address || null,
       items: {
         create: {

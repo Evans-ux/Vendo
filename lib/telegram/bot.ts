@@ -211,10 +211,10 @@ async function generateImage(prompt: string): Promise<Buffer> {
   try {
     // Primary: Hugging Face
     const response = await hf.textToImage({
-      model: "black-forest-labs/FLUX.1-schnell",
+      model: "tencent/HunyuanImage-3.0",
       inputs: IMAGE_GEN_ENHANCE_PROMPT(prompt),
     });
-    return Buffer.from(await response.arrayBuffer());
+    return Buffer.from(await (response as any).arrayBuffer());
   } catch (error: any) {
     console.warn("⚠️ Hugging Face image gen failed (likely quota), falling back to Pollinations:", error.message);
     
