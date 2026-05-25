@@ -58,7 +58,8 @@ async function runTests() {
       });
       const completion = await or.chat.completions.create({
         messages: [{ role: 'user', content: 'Respond with "OpenRouter is active"' }],
-        model: 'google/gemini-2.0-flash-001',
+     
+        model: 'openrouter/free',
       });
       console.log(`✅ OpenRouter AI: SUCCESS - "${completion.choices?.[0]?.message?.content || 'Connected'}"`);
     } catch (e: any) {

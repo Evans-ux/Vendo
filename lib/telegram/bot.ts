@@ -31,8 +31,8 @@ import {
 
 const TELEGRAM_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const GROQ_KEY = (process.env.GROQ_API ?? "").trim();
-const HF_KEY = (process.env.HUGGING_FACE_API ?? "").trim();
-const OLLAMA_URL = "https://ollama.com";
+const HF_KEY = (process.env.HF_API_KEY || process.env.HUGGING_FACE_API || "").trim();
+const OLLAMA_URL = (process.env.OLLAMA_URL || "https://ollama.com").replace(/\/v1.*$/, "");
 const OLLAMA_KEY = process.env.OLLAMA_API_KEY || "";
 const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEY || "").trim();
 
@@ -190,7 +190,7 @@ async function analyzeImage(imageBuffer: Buffer): Promise<string> {
     });
 
     const response = await openRouter.chat.completions.create({
-      model: "google/gemini-2.0-flash-001",
+      model: "openrouter/free",
       messages: [
         {
           role: "user",
