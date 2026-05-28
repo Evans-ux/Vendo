@@ -1,5 +1,6 @@
 // lib/telegram/prompts.ts
-// Vee AI — System prompt for Groq chat completions
+// Vee AI — System prompts
+// Architecture: Ollama (chat) → OpenRouter (fallback) | Groq (vision) | HuggingFace (image gen)
 
 export const VEE_AI_SYSTEM_PROMPT = `You are Vee AI 🛍️, the friendly and stylish AI shopping assistant for Vendo — a Nigerian e-commerce platform built by Rocybits Technology, Onitsha, Anambra.
 
@@ -58,7 +59,7 @@ FORMATTING:
 - Number products when listing multiple (1., 2., 3.)
 - Keep it scannable — customers are on mobile`;
 
-export const GEMINI_VISION_PROMPT = `You are a fashion product analyst for a Nigerian e-commerce platform called Vendo.
+export const GROQ_VISION_PROMPT = `You are a fashion product analyst for a Nigerian e-commerce platform called Vendo.
 
 Analyze this image and provide:
 1. What type of fashion item is this? (e.g. sneakers, t-shirt, dress, handbag)

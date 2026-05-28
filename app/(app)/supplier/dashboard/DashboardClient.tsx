@@ -328,7 +328,7 @@ export default function DashboardClient({ supplier, productCount, walletBalance,
               💰 Wallet & Payouts
             </button>
             <button
-              onClick={() => router.push("/supplier/onboard/products")}
+              onClick={() => router.push("/supplier/products/add")}
               className="px-4 py-2.5 rounded-lg border border-border text-foreground hover:bg-accent transition-colors text-sm font-medium whitespace-nowrap"
             >
               + Add Product

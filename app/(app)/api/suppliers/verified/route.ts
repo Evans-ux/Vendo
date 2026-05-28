@@ -1,9 +1,8 @@
 // app/api/suppliers/verified/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import prisma from "@/lib/prisma";
 
-// Ensures this route is not statically optimized at build time,
-// deferring Supabase client initialization to runtime.
+// Ensures this route is not statically optimized at build time.
 export const dynamic = 'force-dynamic';
 
 
@@ -18,8 +17,6 @@ export interface SupplierWithProducts {
   businessName: string;
   supplierType: "LOCAL" | "DROPSHIP";
   state?: string;
-  lat?: number;
-  lng?: number;
   kycStatus: string;
   businessDocUrl?: string;
   accountNumber?: string;
@@ -53,120 +50,139 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get("category");
     const verified_only = searchParams.get("verified_only") === "true";
 
-    // Initialize Supabase client inside the handler with build-safe placeholders
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
+    // Get verified suppliers with their approved, in-stock products in a single query
+    const suppliers = await prisma.supplier.findMany({
+      where: {
+        kycStatus: "APPROVED",
+        isActive: true,
+      },
+      select: {
+        id: true,
+        businessName: true,
+        supplierType: true,
+        state: true,
+        kycStatus: true,
+        businessDocUrl: true,
+        accountNumber: true,
+        onboardingStep: true,
+        products: {
+          where: {
+            isApproved: true,
+            isActive: true,
+            stock: { gt: 0 },
+            ...(category ? { category } : {}),
+          },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            category: true,
+            basePrice: true,
+            sellingPrice: true,
+            imageUrls: true,
+            sizes: true,
+            stock: true,
+            deliveryMethod: true,
+            logisticsFee: true,
+          },
+        },
+      },
+    });
 
-    if (!supabaseUrl || !supabaseKey) {
-      console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.");
-      return NextResponse.json({ error: "Server configuration error: Supabase keys are missing." }, { status: 500 });
+    // Get order stats for success rates by traversing OrderItem → Product → Supplier
+    const orderItems = await prisma.orderItem.findMany({
+      where: {
+        product: {
+          supplierId: { in: suppliers.map((s) => s.id) },
+        },
+      },
+      select: {
+        product: { select: { supplierId: true } },
+        order: { select: { id: true, status: true } },
+      },
+    });
+
+    // Group unique orders per supplier for success rate calculation
+    const supplierOrderMap = new Map<string, Map<string, string>>();
+    for (const item of orderItems) {
+      const sid = item.product.supplierId;
+      if (!supplierOrderMap.has(sid)) {
+        supplierOrderMap.set(sid, new Map());
+      }
+      // Use a map of orderId → status so each order is counted once per supplier
+      supplierOrderMap.get(sid)!.set(item.order.id, item.order.status);
     }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Get verified suppliers
-    const { data: suppliers, error: suppliersError } = await supabase
-      .from("suppliers")
-      .select(
-        `id, businessName, supplierType, state, lat, lng, 
-         kycStatus, businessDocUrl, accountNumber, onboardingStep, isActive`
-      )
-      .eq("kycStatus", "APPROVED")
-      .eq("isActive", true);
-
-    if (suppliersError) {
-      console.error("Suppliers fetch error:", suppliersError);
-      return NextResponse.json({ error: "Failed to fetch suppliers" }, { status: 500 });
-    }
-
-    // Get products for each supplier
-    const { data: allProducts, error: productsError } = await supabase
-      .from("products")
-      .select(
-        `id, name, description, category, basePrice, sellingPrice, 
-         imageUrls, sizes, stock, deliveryMethod, logisticsFee, supplierId`
-      )
-      .eq("isApproved", true)
-      .eq("isActive", true)
-      .gt("stock", 0);
-
-    if (productsError) {
-      console.error("Products fetch error:", productsError);
-      return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
-    }
-
-    // Get order stats for success rates
-    const { data: orders } = await supabase.from("orders").select("id, status, supplier_id");
 
     // Build supplier data with products
     const suppliersWithProducts: SupplierWithProducts[] = [];
 
-    for (const supplier of suppliers || []) {
-        // Get products for this supplier
-        const supplierProducts = (allProducts || [])
-          .filter((p) => p.supplierId === supplier.id)
-          .map((p) => {
-            // sizes may be stored as JSON or array
-            let sizes: string[] = [];
-            try {
-              if (p.sizes) {
-                if (typeof p.sizes === "string") {
-                  const parsed = JSON.parse(p.sizes);
-                  sizes = parsed?.available ?? [];
-                } else if (Array.isArray(p.sizes)) {
-                  sizes = p.sizes;
-                }
-              }
-            } catch {
-              sizes = [];
+    for (const supplier of suppliers) {
+      // Map products, handling sizes JSON and Decimal conversions
+      const supplierProducts = supplier.products.map((p) => {
+        // sizes is auto-deserialized from Json — handle both object and array forms
+        let sizes: string[] = [];
+        try {
+          if (p.sizes) {
+            if (Array.isArray(p.sizes)) {
+              sizes = p.sizes as string[];
+            } else if (typeof p.sizes === "object" && p.sizes !== null) {
+              const obj = p.sizes as Record<string, unknown>;
+              sizes = Array.isArray(obj.available) ? (obj.available as string[]) : [];
             }
+          }
+        } catch {
+          sizes = [];
+        }
 
-            return {
-              id: String(p.id),
-              name: p.name,
-              description: p.description,
-              category: p.category,
-              basePrice: Number(p.basePrice) || 0,
-              sellingPrice: Number(p.sellingPrice) || 0,
-              imageUrls: Array.isArray(p.imageUrls) ? p.imageUrls : [],
-              sizes,
-              stock: Number(p.stock) || 0,
-              deliveryMethod: p.deliveryMethod || "LOCAL",
-              logisticsFee: p.logisticsFee != null ? Number(p.logisticsFee) : undefined,
-              source: "LOCAL" as const,
-            };
-          });
+        return {
+          id: String(p.id),
+          name: p.name,
+          description: p.description ?? undefined,
+          category: p.category ?? undefined,
+          basePrice: Number(p.basePrice) || 0,
+          sellingPrice: Number(p.sellingPrice) || 0,
+          imageUrls: Array.isArray(p.imageUrls) ? p.imageUrls : [],
+          sizes,
+          stock: p.stock,
+          deliveryMethod: p.deliveryMethod || "SELF_DELIVERY",
+          logisticsFee: p.logisticsFee != null ? Number(p.logisticsFee) : undefined,
+          source: "LOCAL" as const,
+        };
+      });
 
-        // Calculate logistics info and success rate
-        const isDropship = supplier?.supplierType === "DROPSHIP";
-        const logisticsProvider = isDropship ? "CJ" : "SELF";
-        const estimatedDelivery = isDropship ? "14-21 business days" : "2-3 business days";
+      // Calculate logistics info and success rate
+      const isDropship = supplier.supplierType === "DROPSHIP";
+      const logisticsProvider = isDropship ? "CJ" : "SELF";
+      const estimatedDelivery = isDropship ? "14-21 business days" : "2-3 business days";
 
-        const supplierOrders = (orders || []).filter((o: any) => o.supplier_id === supplier.id);
-        const totalOrders = supplierOrders.length;
-        const successful = supplierOrders.filter((o: any) => ["DELIVERED", "COMPLETED", "FULFILLED"].includes((o.status || "").toUpperCase())).length;
-        const successRate = totalOrders > 0 ? (successful / totalOrders) * 100 : 0;
+      // Success rate from order stats (unique orders per supplier)
+      const ordersMap = supplierOrderMap.get(supplier.id);
+      const totalOrders = ordersMap ? ordersMap.size : 0;
+      const successful = ordersMap
+        ? [...ordersMap.values()].filter((status) =>
+            ["DELIVERED", "COMPLETED", "FULFILLED"].includes(status.toUpperCase())
+          ).length
+        : 0;
+      const successRate = totalOrders > 0 ? (successful / totalOrders) * 100 : 0;
 
-        suppliersWithProducts.push({
-          id: String(supplier.id),
-          businessName: supplier.businessName,
-          supplierType: supplier.supplierType,
-          state: supplier.state,
-          lat: supplier.lat != null ? Number(supplier.lat) : undefined,
-          lng: supplier.lng != null ? Number(supplier.lng) : undefined,
-          kycStatus: supplier.kycStatus,
-          businessDocUrl: supplier.businessDocUrl ? "verified" : "pending",
-          accountNumber: supplier.accountNumber ? "verified" : "pending",
-          onboardingStep: supplier.onboardingStep,
-          successRate: parseFloat(successRate.toFixed(2)),
-          totalOrders: totalOrders,
-          logisticsInfo: {
-            provider: logisticsProvider as "SELF" | "CJ",
-            estimatedDelivery,
-            deliveryMethod: isDropship ? "CJ Dropshipping Integration" : "Local Delivery",
-          },
-          products: supplierProducts,
-        });
+      suppliersWithProducts.push({
+        id: String(supplier.id),
+        businessName: supplier.businessName,
+        supplierType: supplier.supplierType,
+        state: supplier.state ?? undefined,
+        kycStatus: supplier.kycStatus,
+        businessDocUrl: supplier.businessDocUrl ? "verified" : "pending",
+        accountNumber: supplier.accountNumber ? "verified" : "pending",
+        onboardingStep: supplier.onboardingStep,
+        successRate: parseFloat(successRate.toFixed(2)),
+        totalOrders: totalOrders,
+        logisticsInfo: {
+          provider: logisticsProvider as "SELF" | "CJ",
+          estimatedDelivery,
+          deliveryMethod: isDropship ? "CJ Dropshipping Integration" : "Local Delivery",
+        },
+        products: supplierProducts,
+      });
     }
 
     return NextResponse.json({

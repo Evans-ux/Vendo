@@ -152,7 +152,7 @@ CREATE INDEX IF NOT EXISTS idx_suppliers_email ON suppliers(email);
 ### 3.2 Set Site URL
 1. Find the field labeled **"Site URL"**
 2. Clear any existing value
-3. Type: `https://vendo-nu.vercel.app`
+3. Type: `https://vendo.com.ng`
 4. Press Enter or Tab
 
 ### 3.3 Add Redirect URLs

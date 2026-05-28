@@ -1,5 +1,6 @@
 // lib/telegram/bot.ts
-// Vee AI — Telegram bot powered by Groq (chat), Gemini (vision), HuggingFace (image gen)
+// Vee AI — Telegram bot
+// Architecture: Ollama (chat, dynamic model) → OpenRouter (chat fallback) | Groq (vision) | HuggingFace/Pollinations (image gen)
 
 import { Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
@@ -8,11 +9,10 @@ import Groq from "groq-sdk";
 import { Ollama } from "ollama";
 import { HfInference } from "@huggingface/inference";
 import OpenAI from "openai";
- 
 
 import {
   VEE_AI_SYSTEM_PROMPT,
-  GEMINI_VISION_PROMPT,
+  GROQ_VISION_PROMPT,
   IMAGE_GEN_ENHANCE_PROMPT,
 } from "./prompts";
 import {
@@ -30,7 +30,7 @@ import {
 // ─── Environment Variables ───────────────────────────────────────────────────
 
 const TELEGRAM_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
-const GROQ_KEY = (process.env.GROQ_API ?? "").trim();
+const GROQ_KEY = (process.env.GROQ_API ?? process.env.GROQ_API_KEY ?? "").trim();
 const HF_KEY = (process.env.HF_API_KEY || process.env.HUGGING_FACE_API || "").trim();
 const OLLAMA_URL = (process.env.OLLAMA_URL || "https://ollama.com").replace(/\/v1.*$/, "");
 const OLLAMA_KEY = process.env.OLLAMA_API_KEY || "";
@@ -38,7 +38,48 @@ const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEY || "").trim();
 
 if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env");
 
-// ─── AI Clients ──────────────────────────────────────────────────────────────
+// ─── Ollama Dynamic Model Selection ─────────────────────────────────────────
+
+let ollamaModelName: string | null = null;
+let ollamaModelFetched = false;
+
+/**
+ * Fetch available models from the Ollama instance and pick the best one.
+ * Caches the result so we only fetch once per cold start.
+ */
+async function getOllamaModel(): Promise<string> {
+  if (ollamaModelFetched && ollamaModelName) return ollamaModelName;
+
+  try {
+    const ollama = new Ollama({
+      host: OLLAMA_URL,
+      headers: OLLAMA_KEY ? { Authorization: `Bearer ${OLLAMA_KEY}` } : {},
+    });
+
+    const listResult = await ollama.list();
+    const models = (listResult.models || [])
+      .map((m: any) => (m.name || "").trim())
+      .filter((name: string) => name.length > 0); // Sanitize: remove empty strings
+
+    if (models.length > 0) {
+      // Prefer llama models, then any available model
+      const preferred = models.find((m: string) =>
+        m.toLowerCase().includes("llama")
+      );
+      ollamaModelName = preferred || models[0];
+      console.log(`[Ollama] Selected model: ${ollamaModelName} (from ${models.length} available: ${models.join(", ")})`);
+    } else {
+      console.warn("[Ollama] No models found on the instance. Will use fallback.");
+      ollamaModelName = "llama3"; // Default guess
+    }
+  } catch (error: any) {
+    console.warn(`[Ollama] Failed to fetch models: ${error.message}. Using default "llama3".`);
+    ollamaModelName = "llama3";
+  }
+
+  ollamaModelFetched = true;
+  return ollamaModelName;
+}
 
 // ─── Conversation Memory (in-memory, resets on cold start) ──────────────────
 
@@ -82,6 +123,17 @@ function sanitizeMarkdown(text: string): string {
     .replace(/_/g, "\\_"); // Escape underscores to prevent unclosed italic entity errors
 }
 
+/**
+ * Sanitize AI response — ensure we never return an empty or whitespace-only string.
+ */
+function sanitizeAIResponse(reply: string | null | undefined): string {
+  const cleaned = (reply || "").trim();
+  if (!cleaned || cleaned.length === 0) {
+    return "";
+  }
+  return cleaned;
+}
+
 /** Send a "typing…" indicator while running an async operation */
 async function withTyping<T>(
   ctx: any,
@@ -100,9 +152,9 @@ async function withTyping<T>(
   }
 }
 
-// ─── Groq Chat Completion ────────────────────────────────────────────────────
+// ─── Ollama Chat (Primary) → OpenRouter Fallback ─────────────────────────────
 
-async function chatWithGroq(
+async function chatWithAI(
   telegramId: string,
   userMessage: string,
   extraContext: string = ""
@@ -123,49 +175,62 @@ async function chatWithGroq(
 
   let reply = "";
 
+  // ── Primary: Ollama ───────────────────────────────────────────────────
   try {
-    if (!GROQ_KEY) throw new Error("Missing GROQ_API_KEY");
-    
-    // @ts-ignore
-    const groq = new Groq({ apiKey: GROQ_KEY });
+    const modelName = await getOllamaModel();
+    console.log(`[Ollama] Sending chat to model: ${modelName}`);
 
-    const completion = await groq.chat.completions.create({
-      messages,
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.7,
-      max_tokens: 1024,
+    const ollamaClient = new Ollama({
+      host: OLLAMA_URL,
+      headers: OLLAMA_KEY ? { Authorization: `Bearer ${OLLAMA_KEY}` } : {},
     });
-    reply = completion.choices[0]?.message?.content || "";
-    console.log(`[Groq] Raw response: ${completion.choices?.[0]?.message?.content}`);
-    console.log(`[Groq] Processed reply: ${reply}`);
-  } catch (error) {
-    console.warn("⚠️ Groq failed, falling back to Ollama:", error);
-    
+
+    const response = await ollamaClient.chat({
+      messages: messages as any[],
+      model: modelName,
+    });
+
+    reply = sanitizeAIResponse(response.message?.content);
+    if (reply) {
+      console.log(`[Ollama] ✅ Got response (${reply.length} chars) from ${modelName}`);
+    } else {
+      console.warn(`[Ollama] ⚠️ Empty response from ${modelName}, falling back...`);
+      throw new Error("Ollama returned empty response");
+    }
+  } catch (ollamaError: any) {
+    console.warn(`⚠️ Ollama failed: ${ollamaError.message}. Falling back to OpenRouter...`);
+
+    // ── Fallback: OpenRouter ──────────────────────────────────────────
     try {
-      // Fallback using the official Ollama Cloud library
-      const ollamaCloud = new Ollama({
-        host: OLLAMA_URL,
-        headers: {
-          Authorization: `Bearer ${OLLAMA_KEY}`,
+      if (!OPENROUTER_KEY) throw new Error("Missing OPENROUTER_API_KEY");
+
+      const openRouter = new OpenAI({
+        baseURL: "https://openrouter.ai/api/v1",
+        apiKey: OPENROUTER_KEY,
+        defaultHeaders: {
+          "HTTP-Referer": "https://vendo.ng",
+          "X-Title": "Vendo Vee AI",
         },
       });
 
-      const response = await ollamaCloud.chat({
-        messages: messages as any[],
-        model: "llama3", 
+      const completion = await openRouter.chat.completions.create({
+        model: "openrouter/free",
+        messages,
       });
-      
-      reply = response.message.content || "";
-      console.log(`[Ollama] Raw response: ${reply}`);
-      console.log(`[Ollama] Processed reply: ${reply}`);
-    } catch (ollamaError) {
-      console.error("❌ Both Groq and Ollama failed:", ollamaError);
-      reply = "Sorry, both AI services are currently unavailable. Please try again later."; // More specific error
+
+      reply = sanitizeAIResponse(completion.choices[0]?.message?.content);
+      if (reply) {
+        console.log(`[OpenRouter] ✅ Fallback response (${reply.length} chars), model: ${completion.model}`);
+      } else {
+        console.warn("[OpenRouter] ⚠️ Empty response from fallback");
+      }
+    } catch (orError: any) {
+      console.error("❌ Both Ollama and OpenRouter failed:", orError.message);
     }
   }
 
   if (!reply) {
-    reply = "Sorry, I couldn't process that. Try again? 🙏 (AI returned empty response)"; // More specific
+    reply = "Sorry, I couldn't process that right now. Both AI services are a bit busy — please try again in a moment! 🙏";
   }
 
   // Save assistant reply to history
@@ -174,29 +239,24 @@ async function chatWithGroq(
   return reply;
 }
 
-// ─── Gemini Vision Analysis ──────────────────────────────────────────────────
+// ─── Groq Vision Analysis ────────────────────────────────────────────────────
 
 async function analyzeImage(imageBuffer: Buffer): Promise<string> {
-  if (!OPENROUTER_KEY) return "Vision analysis is currently unavailable (Missing API Key).";
+  if (!GROQ_KEY) return "Vision analysis is currently unavailable (Missing Groq API Key).";
 
   try {
     const base64Image = imageBuffer.toString("base64");
-    const openRouter = new OpenAI({
-      baseURL: "https://openrouter.ai/api/v1",
-      apiKey: OPENROUTER_KEY,
-      defaultHeaders: {
-        "HTTP-Referer": "https://vendo.ng",
-        "X-Title": "Vendo Vee AI",
-      }
-    });
 
-    const response = await openRouter.chat.completions.create({
-      model: "openrouter/free",
+    // @ts-ignore
+    const groq = new Groq({ apiKey: GROQ_KEY });
+
+    const response = await groq.chat.completions.create({
+      model: "llama-3.2-90b-vision-preview",
       messages: [
         {
           role: "user",
           content: [
-            { type: "text", text: GEMINI_VISION_PROMPT },
+            { type: "text", text: GROQ_VISION_PROMPT },
             {
               type: "image_url",
               image_url: { url: `data:image/jpeg;base64,${base64Image}` },
@@ -204,13 +264,61 @@ async function analyzeImage(imageBuffer: Buffer): Promise<string> {
           ],
         },
       ],
+      max_tokens: 512,
+      temperature: 0.3,
     });
-    const content = response.choices[0]?.message?.content;
-    console.log(`[OpenRouter] Model used: ${response.model} | Content received: ${!!content}`);
-    return content || "I couldn't analyze this image.";
+
+    const content = sanitizeAIResponse(response.choices[0]?.message?.content);
+    console.log(`[Groq Vision] ✅ Analysis result (${content.length} chars): ${content.substring(0, 100)}...`);
+
+    if (!content) {
+      return "I could see the image but couldn't extract enough detail. Could you try a clearer photo?";
+    }
+    return content;
   } catch (error: any) {
-    console.error("❌ OpenRouter Vision Error:", error.message);
-    return "I'm having trouble connecting to the vision service right now.";
+    console.error("❌ Groq Vision Error:", error.message);
+
+    // Fallback: try OpenRouter for vision if Groq fails
+    if (OPENROUTER_KEY) {
+      try {
+        console.log("[Vision] Trying OpenRouter as vision fallback...");
+        const base64Image = imageBuffer.toString("base64");
+        const openRouter = new OpenAI({
+          baseURL: "https://openrouter.ai/api/v1",
+          apiKey: OPENROUTER_KEY,
+          defaultHeaders: {
+            "HTTP-Referer": "https://vendo.ng",
+            "X-Title": "Vendo Vee AI",
+          },
+        });
+
+        const response = await openRouter.chat.completions.create({
+          model: "openrouter/free",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: GROQ_VISION_PROMPT },
+                {
+                  type: "image_url",
+                  image_url: { url: `data:image/jpeg;base64,${base64Image}` },
+                },
+              ],
+            },
+          ],
+        });
+
+        const fallbackContent = sanitizeAIResponse(response.choices[0]?.message?.content);
+        if (fallbackContent) {
+          console.log(`[OpenRouter Vision Fallback] ✅ Got analysis (${fallbackContent.length} chars)`);
+          return fallbackContent;
+        }
+      } catch (fallbackErr: any) {
+        console.error("❌ OpenRouter vision fallback also failed:", fallbackErr.message);
+      }
+    }
+
+    return "I'm having trouble analyzing images right now. Could you describe what you're looking for instead?";
   }
 }
 
@@ -302,7 +410,7 @@ Powered by Rocybits Technology 🚀`;
       const products = await getLatestProducts(5);
       const catalog = formatProductsForAI(products);
 
-      const reply = await chatWithGroq(
+      const reply = await chatWithAI(
         String(ctx.from.id),
         "Show me the latest products available in the store",
         catalog
@@ -427,7 +535,26 @@ Powered by Rocybits Technology 🚀`;
     });
   });
 
-  // ── Photo handler — Gemini vision + product matching ───────────────────
+  // ── Voice note handler — Polite "not supported" ────────────────────────
+  bot.on(message("voice"), async (ctx) => {
+    await ctx.reply(
+      "🎙️ Thanks for the voice note! Unfortunately, voice messages aren't supported just yet.\n\n" +
+      "Please type your message instead and I'll be happy to help you find exactly what you need! 😊\n\n" +
+      "💡 *Tip:* You can also send me photos of items you like and I'll find similar products in our store!",
+      { parse_mode: "Markdown" }
+    );
+  });
+
+  // Also handle video notes (circular video messages in Telegram)
+  bot.on(message("video_note"), async (ctx) => {
+    await ctx.reply(
+      "🎥 Thanks for the video message! Unfortunately, video notes aren't supported just yet.\n\n" +
+      "Please type your message or send a photo instead and I'll be happy to help! 😊",
+      { parse_mode: "Markdown" }
+    );
+  });
+
+  // ── Photo handler — Groq vision + product matching ─────────────────────
   bot.on(message("photo"), async (ctx) => {
     await ctx.reply("📸 Nice! Let me analyze this image... 🔍");
 
@@ -444,26 +571,35 @@ Powered by Rocybits Technology 🚀`;
         return Buffer.from(await response.arrayBuffer());
       });
 
-      // Step 1: Analyze with OpenRouter/Gemini
+      // Step 1: Analyze with Groq Vision
       const analysis = await withTyping(ctx, "typing", () =>
         analyzeImage(imageBuffer)
       );
 
-      // Step 2: Search for matching products using the analysis
-      const products = await searchProducts(analysis, 5);
+      console.log(`[Photo Handler] Vision analysis: "${analysis}"`);
+
+      // Step 2: Extract search keywords from the analysis
+      // The vision model returns a paragraph — extract meaningful search terms
+      const searchKeywords = extractSearchKeywords(analysis);
+      console.log(`[Photo Handler] Extracted search keywords: "${searchKeywords}"`);
+
+      // Step 3: Search for matching products using the extracted keywords
+      const products = await searchProducts(searchKeywords, 5);
+      console.log(`[Photo Handler] Found ${products.length} matching products`);
+
       const catalog = formatProductsForAI(products);
 
-      // Step 3: Get user profile
+      // Step 4: Get user profile
       const user = await getOrCreateUser(
         String(ctx.from.id),
         ctx.from.first_name
       );
       const profile = formatUserProfileForAI(user);
 
-      // Step 4: Build context and send to Groq for a natural response
-      const extraContext = `[IMAGE ANALYSIS by Gemini Vision]\n${analysis}\n\n${catalog}\n\n${profile}`;
+      // Step 5: Build context and send to AI for a natural response
+      const extraContext = `[IMAGE ANALYSIS by Groq Vision]\n${analysis}\n\n${catalog}\n\n${profile}`;
 
-      const reply = await chatWithGroq(
+      const reply = await chatWithAI(
         String(ctx.from.id),
         "I just sent you a photo of a fashion item. Based on your analysis, what is it and do you have anything similar in the store?",
         extraContext
@@ -482,6 +618,14 @@ Powered by Rocybits Technology 🚀`;
             // Skip invalid image URLs
           }
         }
+      }
+
+      // If no products were found, let the user know explicitly
+      if (products.length === 0) {
+        await ctx.reply(
+          "🔍 I analyzed the image but couldn't find exact matches in our current catalog. " +
+          "Try describing what you're looking for in text and I'll search again!",
+        );
       }
     } catch (error) {
       console.error("Photo analysis error:", error);
@@ -508,7 +652,7 @@ Powered by Rocybits Technology 🚀`;
     });
   });
 
-  // ── Text message handler — Main Groq chat with product search ──────────
+  // ── Text message handler — Main AI chat with product search ────────────
   bot.on(message("text"), async (ctx) => {
     const userMessage = ctx.message.text;
     const telegramId = String(ctx.from.id);
@@ -579,9 +723,9 @@ Thanks for shopping with Vendo! 🛍️`;
         // Build context
         const extraContext = `${catalog}\n\n${profile}`;
 
-        // Get AI response from Groq
-        const reply = await chatWithGroq(telegramId, userMessage, extraContext);
-        console.log(`[Bot] Final reply from AI for user ${telegramId}: ${reply}`);
+        // Get AI response (Ollama primary → OpenRouter fallback)
+        const reply = await chatWithAI(telegramId, userMessage, extraContext);
+        console.log(`[Bot] Final reply from AI for user ${telegramId}: ${reply.substring(0, 100)}...`);
 
         await ctx.reply(truncate(sanitizeMarkdown(reply)), { parse_mode: "Markdown" });
         console.log(`[Bot] Message sent to Telegram for user ${telegramId}`);
@@ -624,6 +768,67 @@ Thanks for shopping with Vendo! 🛍️`;
   }
 
   return bot;
+}
+
+// ─── Keyword Extraction Helper ───────────────────────────────────────────────
+
+/**
+ * Extract meaningful search keywords from a vision analysis paragraph.
+ * The Groq vision model returns a descriptive paragraph — we need to pull out
+ * the product-relevant terms for database search.
+ */
+function extractSearchKeywords(analysis: string): string {
+  // Common fashion keywords to prioritize
+  const fashionTerms = [
+    "sneakers", "sneaker", "shoes", "shoe", "boot", "boots", "sandal", "sandals",
+    "heels", "heel", "loafers", "slides", "flip-flops", "slippers",
+    "shirt", "t-shirt", "tshirt", "polo", "blouse", "top", "tank",
+    "dress", "gown", "skirt", "jumpsuit",
+    "jeans", "trousers", "pants", "shorts", "joggers", "chinos",
+    "jacket", "hoodie", "sweater", "cardigan", "blazer", "coat",
+    "bag", "handbag", "backpack", "clutch", "purse", "tote",
+    "watch", "watches", "bracelet", "necklace", "earring", "ring", "jewelry",
+    "cap", "hat", "beanie", "scarf",
+    "belt", "sunglasses", "glasses",
+    "ankara", "agbada", "dashiki", "kaftan",
+    // Colors
+    "black", "white", "red", "blue", "green", "yellow", "pink", "purple",
+    "brown", "grey", "gray", "navy", "beige", "gold", "silver", "orange",
+    "cream", "burgundy", "maroon", "teal", "coral",
+    // Styles
+    "casual", "formal", "streetwear", "sporty", "vintage", "classic",
+    "traditional", "modern", "elegant", "athletic",
+    // Materials
+    "leather", "suede", "canvas", "denim", "silk", "cotton", "lace",
+  ];
+
+  const analysisLower = analysis.toLowerCase();
+  const foundTerms: string[] = [];
+
+  // Extract matching fashion terms from the analysis
+  for (const term of fashionTerms) {
+    if (analysisLower.includes(term) && !foundTerms.includes(term)) {
+      foundTerms.push(term);
+    }
+  }
+
+  // If we found fashion terms, join them into a search string
+  if (foundTerms.length > 0) {
+    // Limit to 6 most relevant terms to keep search focused
+    const searchString = foundTerms.slice(0, 6).join(" ");
+    console.log(`[Keywords] Extracted ${foundTerms.length} terms: ${searchString}`);
+    return searchString;
+  }
+
+  // Fallback: use the first sentence of the analysis as a search query
+  const firstSentence = analysis.split(/[.!?]/)[0]?.trim() || analysis;
+  // Remove common non-searchable words
+  const cleaned = firstSentence
+    .replace(/\b(the|this|is|a|an|it|has|with|and|or|in|on|for|of|to|are|was|were|been|being|have|that|from|which|very|also|its|these|those|can|will|may|just|more|most|some|any|all|each|both|few|other|such|than|too|only|same|into|over|after|about|out|up|down|one|two|three|four|five|image|shows|appears|features|looks|seems|photo|picture|appears)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned || analysis.substring(0, 50);
 }
 
 export const bot = createBot();

@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Order already paid' }, { status: 400 })
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://vendo-nu.vercel.app'
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://vendo.com.ng'
     const txRef = `vendo_${order.id}_${Date.now()}`
     const productNames = order.items.map(i => i.product.name).join(', ')
 

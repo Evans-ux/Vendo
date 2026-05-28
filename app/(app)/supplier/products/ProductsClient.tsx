@@ -133,7 +133,7 @@ export default function ProductsClient({ products }: { products: Product[] }) {
 
           {/* Add Product Button */}
           <button
-            onClick={() => router.push("/supplier/onboard/products")}
+            onClick={() => router.push("/supplier/products/add")}
             className="w-full sm:w-auto px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-semibold transition-colors whitespace-nowrap"
           >
             + Add Product
@@ -153,7 +153,7 @@ export default function ProductsClient({ products }: { products: Product[] }) {
                 : `No ${filter} products`}
             </p>
             <button
-              onClick={() => router.push("/supplier/onboard/products")}
+              onClick={() => router.push("/supplier/products/add")}
               className="px-4 sm:px-6 py-2.5 sm:py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm sm:text-base font-semibold transition-colors"
             >
               Add Your First Product

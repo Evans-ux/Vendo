@@ -1,15 +1,7 @@
-// app/api/users/create/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-// The import below is not used and can be removed for clarity
-// import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'; 
+import prisma from "@/lib/prisma";
 
-// Ensures this route is not statically optimized at build time,
-// deferring Supabase client initialization to runtime.
 export const dynamic = 'force-dynamic';
-// ═══════════════════════════════════════════════════════════════════════════
-// CREATE USER ENDPOINT - Called by Telegram AI when user is new
-// ═══════════════════════════════════════════════════════════════════════════
 
 export interface CreateUserRequest {
   telegramId: string;
@@ -23,15 +15,6 @@ export interface CreateUserRequest {
 export async function POST(request: NextRequest) {
   try {
     const body: CreateUserRequest = await request.json();
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
-
-    if (!supabaseUrl || !supabaseKey) {
-      console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.");
-      return NextResponse.json({ error: "Server configuration error: Supabase keys are missing." }, { status: 500 });
-    }
-    const supabase = createClient(supabaseUrl, supabaseKey);
     const { telegramId, telegramUsername, name, phone, shoeSize, shirtSize } = body;
 
     // Validate
@@ -40,11 +23,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
-    const { data: existing } = await supabase
-      .from("users")
-      .select("id")
-      .eq("telegramId", telegramId)
-      .single();
+    const existing = await prisma.user.findUnique({
+      where: { telegramId },
+      select: { id: true }
+    });
 
     if (existing) {
       return NextResponse.json({
@@ -56,9 +38,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new user
-    const { data: user, error } = await supabase
-      .from("users")
-      .insert({
+    const user = await prisma.user.create({
+      data: {
         telegramId,
         email: `telegram_${telegramId}@vendo.local`, // placeholder email
         name: name || telegramUsername || `User_${telegramId}`,
@@ -66,14 +47,9 @@ export async function POST(request: NextRequest) {
         shoeSize,
         shirtSize,
         role: "CUSTOMER",
-      })
-      .select("id, telegramId, name, email")
-      .single();
-
-    if (error) {
-      console.error("User creation error:", error);
-      return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
-    }
+      },
+      select: { id: true, telegramId: true, name: true, email: true }
+    });
 
     return NextResponse.json({
       success: true,

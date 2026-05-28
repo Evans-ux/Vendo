@@ -2,7 +2,7 @@
  * POST /api/sendbox/webhook
  *
  * Sendbox calls this URL when a shipment status changes.
- * Registered at: https://vendo-nu.vercel.app/api/sendbox/webhook
+ * Registered at: https://vendo.com.ng/api/sendbox/webhook
  *
  * Sendbox signs each request with HMAC-SHA512 using your webhook secret.
  * We verify the signature before processing anything.

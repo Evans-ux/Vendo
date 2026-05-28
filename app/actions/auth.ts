@@ -38,7 +38,7 @@ export async function signup(data: SignupData) {
     password: data.password,
     options: {
       // After clicking the email link, Supabase exchanges the code here
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://vendo-nu.vercel.app'}/auth/callback`,
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://vendo.com.ng'}/auth/callback`,
       data: {
         full_name: data.full_name,
       },
@@ -173,7 +173,7 @@ export async function getUser() {
 // OAuth Login with Google
 export async function signInWithGoogle(): Promise<{ error?: string; url?: string }> {
   const supabase = await createClient()
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://vendo-nu.vercel.app'
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://vendo.com.ng'
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
@@ -190,7 +190,7 @@ export async function signInWithGoogle(): Promise<{ error?: string; url?: string
 // Forgot Password - Send reset email
 export async function forgotPassword(email: string) {
   const supabase = await createClient()
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://vendo-nu.vercel.app'
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://vendo.com.ng'
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${siteUrl}/auth/reset-password`,
   })

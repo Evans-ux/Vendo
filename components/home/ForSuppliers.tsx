@@ -7,7 +7,7 @@ import Image from "next/image";
 const BENEFITS = [
   { icon: "🚀", title: "Go live in 3 minutes", desc: "Register, upload products, pass KYC. Vee AI handles the rest." },
   { icon: "🤖", title: "AI sells for you 24/7", desc: "Vee AI responds to customers, recommends your products, and closes orders while you sleep." },
-  { icon: "💰", title: "Keep 75% of every sale", desc: "We take a 25% commission. No monthly fees, no hidden charges." },
+  { icon: "💰", title: "Keep 90% of every sale", desc: "We take a 10% commission. No monthly fees, no hidden charges." },
   { icon: "📊", title: "Real-time analytics", desc: "Track your products, orders, and revenue from your supplier dashboard." },
 ];
 

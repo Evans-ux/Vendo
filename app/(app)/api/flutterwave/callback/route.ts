@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get('status')
   const txRef = searchParams.get('tx_ref')
   const transactionId = searchParams.get('transaction_id')
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://vendo-nu.vercel.app'
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://vendo.com.ng'
 
   if (!txRef || !transactionId) {
     return NextResponse.redirect(`${siteUrl}/payment/failed?reason=missing_params`)

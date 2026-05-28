@@ -21,7 +21,7 @@
 3. Click **Providers** tab
 4. Click on **Email** provider
 5. **Check** the box for "Confirm email"
-6. Set the redirect URL to: `https://vendo-nu.vercel.app/auth/callback`
+6. Set the redirect URL to: `https://vendo.com.ng/auth/callback`
 7. Click **Save**
 
 ### **Step 2: Configure Email Templates (Optional)**
@@ -33,7 +33,7 @@
 
 ### **Step 3: Test the Flow**
 
-1. Go to https://vendo-nu.vercel.app/supplier/signup
+1. Go to https://vendo.com.ng/supplier/signup
 2. Fill out the signup form with a real email address
 3. Click "Create Account"
 4. You'll see a success message: "Please check your email to verify your account"

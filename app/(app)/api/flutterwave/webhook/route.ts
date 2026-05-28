@@ -6,7 +6,7 @@
  * the customer closes the browser before being redirected.
  *
  * Register this URL in your Flutterwave dashboard:
- * https://vendo-nu.vercel.app/api/flutterwave/webhook
+ * https://vendo.com.ng/api/flutterwave/webhook
  *
  * Flutterwave signs requests with a secret hash in the
  * verif-hash header. Set FLW_WEBHOOK_HASH in your env.

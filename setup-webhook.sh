@@ -5,7 +5,7 @@
 # Token should be in TELEGRAM_BOT_TOKEN environment variable
 
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
-DOMAIN="${1:-vendo-nu.vercel.app}"  # Default to production domain
+DOMAIN="${1:-vendo.com.ng}"  # Default to production domain
 WEBHOOK_URL="https://${DOMAIN}/api/telegram"
 
 # Check if token is provided

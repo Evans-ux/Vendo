@@ -237,6 +237,8 @@ model Product {
   // Example: 1500 (₦1,500 per delivery)
   // Shown to supplier before they choose PLATFORM_LOGISTICS
   logisticsFee Decimal? @db.Decimal(10, 2)
+  // Sendbox courier identifier for PLATFORM_LOGISTICS
+  courierId String? // optional courier ID from Sendbox
 
   // Admin must approve before product appears in Telegram bot search
   isApproved Boolean @default(true)

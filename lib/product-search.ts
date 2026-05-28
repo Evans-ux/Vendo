@@ -1,5 +1,5 @@
 // lib/product-search.ts
-import { createClient } from "@supabase/supabase-js";
+import prisma from "@/lib/prisma";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PRICE RANGE PARSER
@@ -77,19 +77,21 @@ export interface SupplierScore {
 }
 
 export async function verifySupplier(supplierId: string): Promise<SupplierScore> {
-  // Initialize Supabase client only when needed, at runtime
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build"; 
-  const supabase = createClient(supabaseUrl, supabaseKey);
   try {
-    // Get supplier details
-    const { data: supplier, error: supplierError } = await supabase
-      .from("suppliers")
-      .select("id, kycStatus, isActive, businessDocUrl, bankName, accountNumber")
-      .eq("id", supplierId)
-      .single();
+    // Get supplier details via Prisma
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: {
+        id: true,
+        kycStatus: true,
+        isActive: true,
+        businessDocUrl: true,
+        bankName: true,
+        accountNumber: true,
+      },
+    });
 
-    if (supplierError || !supplier) {
+    if (!supplier) {
       return {
         supplierId,
         isVerified: false,
@@ -140,13 +142,25 @@ export async function verifySupplier(supplierId: string): Promise<SupplierScore>
 
     // Check 5: Order History & Rating (if exists)
     try {
-      const { data: orders } = await supabase
-        .from("orders")
-        .select("status, id")
-        .eq("supplier_id", supplierId);
+      // Find orders that contain products from this supplier
+      const orders = await prisma.order.findMany({
+        where: {
+          items: {
+            some: {
+              product: {
+                supplierId: supplier.id,
+              },
+            },
+          },
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
 
-      const totalOrders = orders?.length || 0;
-      const deliveredOrders = orders?.filter((o) => o.status === "DELIVERED").length || 0;
+      const totalOrders = orders.length;
+      const deliveredOrders = orders.filter((o) => o.status === "DELIVERED").length;
       const successRate = totalOrders > 0 ? (deliveredOrders / totalOrders) * 100 : 0;
 
       if (totalOrders > 0) {
@@ -228,20 +242,24 @@ export async function searchProducts(
   limit: number = 10,
   minVerificationScore: number = 50
 ): Promise<SearchResult[]> {
-  // Initialize Supabase client only when needed, at runtime
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder_key_for_build";
-  const supabase = createClient(supabaseUrl, supabaseKey);
   try {
     // Get all verified suppliers first
-    const { data: suppliers, error: supplierError } = await supabase
-      .from("suppliers")
-      .select("id, businessName, supplierType, kycStatus, isActive, businessDocUrl")
-      .eq("kycStatus", "APPROVED")
-      .eq("isActive", true);
+    const suppliers = await prisma.supplier.findMany({
+      where: {
+        kycStatus: "APPROVED",
+        isActive: true,
+      },
+      select: {
+        id: true,
+        businessName: true,
+        supplierType: true,
+        kycStatus: true,
+        isActive: true,
+        businessDocUrl: true,
+      },
+    });
 
-    if (supplierError || !suppliers) {
-      console.error("Supplier fetch error:", supplierError);
+    if (suppliers.length === 0) {
       return [];
     }
 
@@ -259,48 +277,78 @@ export async function searchProducts(
     }
 
     // Get products from verified suppliers
-    const { data: products, error: productError } = await supabase
-      .from("products")
-      .select(
-        `id, name, description, category, basePrice, sellingPrice, 
-         imageUrls, sizes, stock, deliveryMethod, logisticsFee, supplierId`
-      )
-      .in("supplierId", Array.from(verifiedSuppliers.keys()))
-      .eq("isApproved", true)
-      .eq("isActive", true)
-      .ilike("name", `%${query}%`)
-      .gte("sellingPrice", priceRange.min)
-      .lte("sellingPrice", priceRange.max)
-      .gt("stock", 0)
-      .limit(limit);
-
-    if (productError) {
-      console.error("Product fetch error:", productError);
-      return [];
-    }
+    const products = await prisma.product.findMany({
+      where: {
+        supplierId: {
+          in: Array.from(verifiedSuppliers.keys()),
+        },
+        isApproved: true,
+        isActive: true,
+        name: {
+          contains: query,
+          mode: "insensitive",
+        },
+        sellingPrice: {
+          gte: priceRange.min,
+          lte: priceRange.max,
+        },
+        stock: {
+          gt: 0,
+        },
+      },
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        category: true,
+        basePrice: true,
+        sellingPrice: true,
+        imageUrls: true,
+        sizes: true,
+        stock: true,
+        deliveryMethod: true,
+        logisticsFee: true,
+        supplierId: true,
+      },
+    });
 
     // Format results
     const results: SearchResult[] = [];
     for (const product of products || []) {
       const supplierScore = verifiedSuppliers.get(product.supplierId);
-      if (!supplierScore) continue;
+      const supplier = suppliers.find((s) => s.id === product.supplierId);
+      if (!supplierScore || !supplier) continue;
+
+      let sizesList: string[] = [];
+      if (product.sizes) {
+        if (typeof product.sizes === "string") {
+          try {
+            sizesList = JSON.parse(product.sizes).available || [];
+          } catch {
+            sizesList = [];
+          }
+        } else if (typeof product.sizes === "object" && product.sizes !== null) {
+          sizesList = (product.sizes as any).available || [];
+        }
+      }
 
       results.push({
         id: product.id,
         name: product.name,
         description: product.description || "",
         category: product.category || "Uncategorized",
-        basePrice: parseFloat(product.basePrice),
-        sellingPrice: parseFloat(product.sellingPrice),
+        basePrice: parseFloat(product.basePrice.toString()),
+        sellingPrice: parseFloat(product.sellingPrice.toString()),
         imageUrls: product.imageUrls || [],
-        sizes: JSON.parse(product.sizes || '{"available":[]}').available || [],
+        sizes: sizesList,
         stock: product.stock,
         deliveryMethod: product.deliveryMethod,
-        logisticsFee: product.logisticsFee ? parseFloat(product.logisticsFee) : null,
+        logisticsFee: product.logisticsFee ? parseFloat(product.logisticsFee.toString()) : null,
         supplier: {
           id: product.supplierId,
-          businessName: suppliers.find((s) => s.id === product.supplierId)?.businessName || "Unknown",
-          supplierType: suppliers.find((s) => s.id === product.supplierId)?.supplierType || "UNKNOWN",
+          businessName: supplier.businessName,
+          supplierType: supplier.supplierType,
           rating: supplierScore.rating,
           successRate: supplierScore.successRate,
         },
