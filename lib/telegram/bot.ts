@@ -19,7 +19,6 @@ import {
   searchProducts,
   searchProductsByParams,
   extractSearchParams,
-  getLatestProducts,
   formatProductsForAI,
   getOrCreateUser,
   updateUserSizes,
@@ -141,6 +140,14 @@ const checkoutState = new Map<string, CheckoutState>();
 function truncate(text: string, max = 4000): string {
   if (text.length <= max) return text;
   return text.substring(0, max) + "\n\n… (truncated)";
+}
+
+/**
+ * Escape special characters for Telegram MarkdownV2.
+ * Required for any user-supplied or DB text used in MarkdownV2 messages.
+ */
+function escapeMarkdownV2(text: string): string {
+  return text.replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, "\\$&");
 }
 
 /** 
@@ -449,66 +456,102 @@ Powered by Rocybits Technology 🚀`;
   });
 
   // ── /shop — Browse latest products ─────────────────────────────────────
+  //
+  // Design: pick up to 5 verified (active + KYC approved) suppliers,
+  // show 2 products each. Send ONE compact list message — no photo floods.
+  // Each product line has two inline buttons:
+  //   [🖼 View Image]  → URL button opening the image in browser
+  //   [🛒 Order]       → callback to start checkout
+  //
   bot.command("shop", async (ctx) => {
     await withTyping(ctx, "typing", async () => {
-      const products = await getLatestProducts(8);
+      const { prisma } = await import("@/lib/prisma");
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://vendo.com.ng";
 
-      if (products.length === 0) {
+      // Fetch up to 5 active, KYC-approved suppliers that have approved products
+      const suppliers = await prisma.supplier.findMany({
+        where: { isActive: true, kycStatus: "APPROVED" },
+        select: { id: true, businessName: true, supplierType: true },
+        take: 5,
+        orderBy: { updatedAt: "desc" },
+      });
+
+      if (suppliers.length === 0) {
+        await ctx.reply("🛍️ No verified stores available right now. Check back soon!");
+        return;
+      }
+
+      // For each supplier grab their 2 newest approved, active, in-stock products
+      type ShopProduct = {
+        id: string;
+        name: string;
+        sellingPrice: any;
+        imageUrls: string[];
+        sizes: any;
+        supplierName: string;
+        deliveryLabel: string;
+      };
+
+      const shopProducts: ShopProduct[] = [];
+
+      for (const supplier of suppliers) {
+        const products = await prisma.product.findMany({
+          where: {
+            supplierId: supplier.id,
+            isApproved: true,
+            isActive: true,
+            stock: { gt: 0 },
+          },
+          select: {
+            id: true,
+            name: true,
+            sellingPrice: true,
+            imageUrls: true,
+            sizes: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 2,
+        });
+
+        for (const p of products) {
+          shopProducts.push({
+            ...p,
+            supplierName: supplier.businessName,
+            deliveryLabel: supplier.supplierType === "LOCAL" ? "2-3 days" : "14-21 days",
+          });
+        }
+      }
+
+      if (shopProducts.length === 0) {
         await ctx.reply("🛍️ No products available right now. Check back soon!");
         return;
       }
 
-      await ctx.reply(
-        `🛍️ *Latest Products (${products.length} items)*\n\nTap *🛒 Order* under any product to buy it!`,
-        { parse_mode: "Markdown" }
-      );
+      // Build a single compact list message
+      const lines: string[] = [`🛍️ *What's in store* (${shopProducts.length} items)\n`];
 
-      // Send each product as a separate photo with its own Order button
-      for (const product of products) {
-        const sizes = typeof product.sizes === "object" && product.sizes !== null
-          ? (product.sizes as { available?: string[] }).available?.join(", ") || "Various"
-          : "Various";
-        const delivery = product.supplier.supplierType === "LOCAL" ? "2-3 days" : "14-21 days";
-
-        const caption =
-          `*${product.name}*\n` +
-          `💰 ₦${Number(product.sellingPrice).toLocaleString()}\n` +
-          `📏 Sizes: ${sizes}\n` +
-          `🚚 ${delivery} · ${product.supplier.businessName}`;
-
-        if (product.imageUrls[0]) {
-          try {
-            await ctx.replyWithPhoto(product.imageUrls[0], {
-              caption,
-              parse_mode: "Markdown",
-              reply_markup: {
-                inline_keyboard: [[
-                  { text: "🛒 Order This", callback_data: `order:${product.id}` }
-                ]]
-              }
-            });
-          } catch {
-            // Image failed — send as text with button
-            await ctx.reply(caption, {
-              parse_mode: "Markdown",
-              reply_markup: {
-                inline_keyboard: [[
-                  { text: "🛒 Order This", callback_data: `order:${product.id}` }
-                ]]
-              }
-            });
-          }
-        } else {
-          await ctx.reply(caption, {
-            parse_mode: "Markdown",
-            reply_markup: {
-              inline_keyboard: [[
-                { text: "🛒 Order This", callback_data: `order:${product.id}` }
-              ]]
-            }
-          });
-        }
+      for (let i = 0; i < shopProducts.length; i++) {
+        const p = shopProducts[i];
+        const price = `₦${Number(p.sellingPrice).toLocaleString()}`;
+        lines.push(`${i + 1}\\. *${escapeMarkdownV2(p.name)}* — ${price}`);
+        lines.push(`   🏪 ${escapeMarkdownV2(p.supplierName)} · 🚚 ${p.deliveryLabel}`);
       }
+
+      lines.push("\n_Tap View Image to preview, or Order to buy\\._");
+
+      // Build inline keyboard — one row per product: [🖼 View] [🛒 Order]
+      const keyboard = shopProducts.map((p) => {
+        const imageUrl = p.imageUrls[0] ?? `${siteUrl}/vendo-logo.png`;
+        return [
+          { text: `🖼 ${p.name.slice(0, 20)}`, url: imageUrl },
+          { text: "🛒 Order", callback_data: `order:${p.id}` },
+        ];
+      });
+
+      await ctx.reply(lines.join("\n"), {
+        parse_mode: "MarkdownV2",
+        reply_markup: { inline_keyboard: keyboard },
+      });
     });
   });
 

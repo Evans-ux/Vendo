@@ -16,11 +16,12 @@ interface Supplier {
   kycDocUrl: string | null;
   kycDocType: string | null;
   kycSubmittedAt: string | null;
-  // NEW: Business Verification
+  // Business Verification
   businessDocUrl: string | null;
   businessDocType: string | null;
-  // NEW: Bank Account Details
+  // Bank Account Details
   bankName: string | null;
+  bankCode: string | null;
   accountNumber: string | null;
   accountHolderName: string | null;
   // Other fields
@@ -129,6 +130,12 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
       const result = await approveKYC(pendingAction.supplierId);
       if (result.success) {
         toast.success("Supplier approved", { description: result.message });
+        // Surface subaccount warning separately so admin knows to follow up
+        if ((result as any).warning) {
+          setTimeout(() => {
+            toast.warning("Subaccount issue", { description: (result as any).warning, duration: 8000 });
+          }, 500);
+        }
         setSelected(null);
         router.refresh();
       } else {
@@ -315,6 +322,31 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
                           <p className="font-medium text-foreground">{value}</p>
                         </div>
                       ))}
+                    </div>
+
+                    {/* Bank account details */}
+                    <div className="px-6 py-4 border-b border-border">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                        Payout Account
+                      </p>
+                      {selected.bankName && selected.accountNumber ? (
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          {[
+                            ["Bank", selected.bankName],
+                            ["Account No.", selected.accountNumber],
+                            ["Account Name", selected.accountHolderName || "—"],
+                          ].map(([label, value]) => (
+                            <div key={label} className={label === "Account Name" ? "col-span-2" : ""}>
+                              <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+                              <p className="font-medium text-foreground">{value}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
+                          ⚠ No bank details — FLW subaccount won't be created on approval
+                        </p>
+                      )}
                     </div>
 
                     {/* Actions */}

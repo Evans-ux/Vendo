@@ -151,12 +151,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Generate human-readable order number: VND-YYYYMMDD-XXXXX
+    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const randPart = Math.random().toString(36).slice(2, 7).toUpperCase();
+    const orderNumber = `VND-${datePart}-${randPart}`;
+
     // Create order
     let order;
     try {
       order = await prisma.order.create({
         data: {
           userId: user_id,
+          orderNumber,
           totalAmount,
           status: "PENDING",
           paymentStatus: "UNPAID",
@@ -165,7 +171,7 @@ export async function POST(request: NextRequest) {
           lng: lng ? Number(lng) : null,
           logisticsProvider: supplier?.supplierType === "LOCAL" ? "SELF" : "CJ",
         },
-        select: { id: true },
+        select: { id: true, orderNumber: true },
       });
     } catch (orderError) {
       console.error("Order creation error:", orderError);
@@ -204,6 +210,7 @@ export async function POST(request: NextRequest) {
       message: "Order created successfully",
       order: {
         id: order.id,
+        orderNumber: order.orderNumber,
         productName: product.name,
         quantity,
         size,
@@ -219,7 +226,7 @@ export async function POST(request: NextRequest) {
         },
       },
       nextStep: "Proceed to payment",
-      paymentLink: `/api/payments/flutterwave?orderId=${order.id}`,
+      paymentLink: `/api/flutterwave/initialize`,
     });
   } catch (error) {
     console.error("Create order endpoint error:", error);

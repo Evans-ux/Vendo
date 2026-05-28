@@ -4,6 +4,21 @@ import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { createClient } from "@/lib/supabase/server"
 
+// ── Telegram helper (fire-and-forget) ────────────────────────────────────────
+async function notifyTelegram(telegramId: string | null | undefined, text: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim()
+  if (!token || !telegramId) return
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: telegramId, text, parse_mode: 'Markdown' }),
+    })
+  } catch (err) {
+    console.error('[Admin] Telegram notify error:', err)
+  }
+}
+
 // ============================================
 // SUPPLIER MANAGEMENT
 // ============================================
@@ -72,7 +87,7 @@ export async function getPendingKYC() {
   try {
     const suppliers = await prisma.supplier.findMany({
       where: { kycStatus: 'PENDING', kycDocUrl: { not: null } },
-      include: { user: { select: { email: true, name: true } } },
+      include: { user: { select: { email: true, name: true, telegramId: true } } },
       orderBy: { kycSubmittedAt: 'asc' },
     })
     return { success: true, suppliers }
@@ -84,6 +99,41 @@ export async function getPendingKYC() {
 
 export async function approveKYC(supplierId: string) {
   try {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      include: { user: true },
+    });
+    if (!supplier) return { success: false, error: 'Supplier not found' };
+
+    // Create Flutterwave subaccount if supplier has bank details and no subaccount yet
+    let flwSubaccountId = supplier.flwSubaccountId;
+    let subaccountWarning: string | null = null;
+
+    if (!flwSubaccountId && supplier.bankCode && supplier.accountNumber && supplier.businessName) {
+      try {
+        const { createSubaccount } = await import('@/lib/flutterwave');
+        const subaccount = await createSubaccount({
+          account_bank: supplier.bankCode,
+          account_number: supplier.accountNumber,
+          business_name: supplier.businessName,
+          business_email: supplier.user.email,
+          country: 'NG',
+          split_type: 'percentage',
+          // Supplier gets 90% — platform keeps 10% commission automatically
+          split_value: 0.9,
+        });
+        flwSubaccountId = subaccount.subaccount_id;
+        console.log(`[KYC Approve] Created FLW subaccount: ${flwSubaccountId} for ${supplier.businessName}`);
+      } catch (flwErr: any) {
+        // Non-blocking — log and surface as a warning but don't fail the approval.
+        // Admin can retry subaccount creation from the supplier settings page.
+        subaccountWarning = `Flutterwave subaccount creation failed: ${flwErr.message}. Supplier is approved but split payments won't work until this is resolved.`;
+        console.error('[KYC Approve] Flutterwave subaccount creation failed:', flwErr.message);
+      }
+    } else if (!supplier.bankCode || !supplier.accountNumber) {
+      subaccountWarning = 'Supplier has no bank details on file — subaccount not created. Split payments will not work until they add bank details.';
+    }
+
     // Approve the supplier and activate their account
     await prisma.supplier.update({
       where: { id: supplierId },
@@ -92,34 +142,53 @@ export async function approveKYC(supplierId: string) {
         kycReviewedAt: new Date(),
         isActive: true,
         onboardingStep: 'COMPLETED',
+        ...(flwSubaccountId ? { flwSubaccountId } : {}),
       },
-    })
+    });
 
     // Approve all products this supplier has uploaded
     await prisma.product.updateMany({
       where: { supplierId },
       data: { isApproved: true },
-    })
+    });
 
     // Upgrade the user's role to SUPPLIER
-    const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } })
-    if (supplier) {
-      await prisma.user.update({
-        where: { id: supplier.userId },
-        data: { role: 'SUPPLIER' },
-      })
-    }
+    await prisma.user.update({
+      where: { id: supplier.userId },
+      data: { role: 'SUPPLIER' },
+    });
 
-    revalidatePath('/admin/kyc')
-    return { success: true, message: 'Supplier verified and all products approved.' }
+    // Notify supplier on Telegram (fire-and-forget)
+    await notifyTelegram(
+      supplier.user.telegramId,
+      `🎉 *Your Vendo account has been approved!*\n\n` +
+      `Welcome to Vendo, *${supplier.businessName}*!\n\n` +
+      `Your KYC verification is complete and your store is now live. ` +
+      `Customers can now discover and order your products.\n\n` +
+      `Visit your dashboard to manage your products and track orders: ` +
+      `https://vendo.com.ng/supplier/dashboard`
+    );
+
+    revalidatePath('/admin/kyc');
+    return {
+      success: true,
+      message: `${supplier.businessName} approved${flwSubaccountId ? ' + FLW subaccount created' : ''}.`,
+      ...(subaccountWarning ? { warning: subaccountWarning } : {}),
+    };
   } catch (error) {
-    console.error('Error approving KYC:', error)
-    return { success: false, error: 'Failed to approve KYC' }
+    console.error('Error approving KYC:', error);
+    return { success: false, error: 'Failed to approve KYC' };
   }
 }
 
 export async function rejectKYC(supplierId: string, reason: string) {
   try {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      include: { user: { select: { telegramId: true } } },
+    })
+    if (!supplier) return { success: false, error: 'Supplier not found' }
+
     await prisma.supplier.update({
       where: { id: supplierId },
       data: {
@@ -128,8 +197,20 @@ export async function rejectKYC(supplierId: string, reason: string) {
         kycReviewedAt: new Date(),
       },
     })
+
+    // Notify supplier on Telegram (fire-and-forget)
+    await notifyTelegram(
+      supplier.user.telegramId,
+      `⚠️ *KYC Verification Update*\n\n` +
+      `Unfortunately, your Vendo KYC submission was not approved.\n\n` +
+      `*Reason:* ${reason}\n\n` +
+      `Please review the feedback, update your documents, and resubmit at:\n` +
+      `https://vendo.com.ng/supplier/onboard/kyc\n\n` +
+      `If you have questions, contact support.`
+    )
+
     revalidatePath('/admin/kyc')
-    return { success: true, message: 'KYC rejected' }
+    return { success: true, message: 'KYC rejected and supplier notified' }
   } catch (error) {
     console.error('Error rejecting KYC:', error)
     return { success: false, error: 'Failed to reject KYC' }

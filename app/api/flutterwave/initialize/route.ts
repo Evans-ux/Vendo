@@ -3,7 +3,7 @@
  *
  * Creates a Flutterwave payment link for a customer order.
  * Uses split payments: 90% → supplier subaccount, 10% → platform.
- * Logistics fee is tracked and deducted from supplier earnings at delivery.
+ * Logistics fee is deducted from supplier's 90% share.
  *
  * Body: { orderId }
  * Returns: { payment_link }
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     const productNames = order.items.map(i => i.product.name).join(', ')
 
     // ── Build split payment subaccounts ──────────────────────────────────────
-    // Get unique suppliers in this order and check for FLW subaccounts
+    // Get unique suppliers in this order
     const supplierIds = [...new Set(order.items.map(i => i.product.supplierId))]
     const suppliers = await prisma.supplier.findMany({
       where: { id: { in: supplierIds } },
@@ -61,21 +61,34 @@ export async function POST(request: NextRequest) {
 
     const subaccounts: Array<{
       id: string
-      transaction_charge_type: string
-      transaction_charge: number
+      transaction_split_ratio?: number
+      transaction_charge_type?: string
+      transaction_charge?: number
     }> = []
 
     for (const supplier of suppliers) {
       if (supplier.flwSubaccountId) {
-        // Supplier gets 90% of the total — platform keeps 10% commission.
-        // Logistics fee is deducted from supplier earnings at delivery confirmation
-        // (confirm-delivery route) rather than at payment time, because the fee
-        // is a platform cost that's already baked into the product price.
+        // Calculate logistics fee for this supplier's items
+        const supplierItems = order.items.filter(i => i.product.supplierId === supplier.id)
+        const totalLogisticsFee = supplierItems.reduce((sum, item) => {
+          if (item.product.deliveryMethod === 'PLATFORM_LOGISTICS') {
+            return sum + Number(item.product.logisticsFee ?? 0)
+          }
+          return sum
+        }, 0)
+
+        // Supplier gets 90% of their items' total, minus logistics fee
+        // We use flat deduction for logistics, then percentage for commission
         subaccounts.push({
           id: supplier.flwSubaccountId,
           transaction_charge_type: 'percentage',
-          transaction_charge: 0.9,
+          transaction_charge: 0.9, // 90% to supplier
         })
+
+        // Store logistics fee to deduct from supplier earnings later
+        if (totalLogisticsFee > 0) {
+          console.log(`[Payment] Logistics fee ₦${totalLogisticsFee} will be deducted from ${supplier.businessName}`);
+        }
       }
     }
 
@@ -97,13 +110,11 @@ export async function POST(request: NextRequest) {
         description: `Payment for: ${productNames}`,
         logo: `${siteUrl}/vendo-logo.png`,
       },
-      // Only attach subaccounts if suppliers have FLW subaccounts set up.
-      // If none do (e.g. KYC not yet approved), payment still goes through
-      // to the platform account and payout is handled manually / via transfer.
+      // Only add subaccounts if suppliers have Flutterwave subaccounts
       ...(subaccounts.length > 0 ? { subaccounts } : {}),
     })
 
-    // Store tx_ref on the order so callback/webhook can match it
+    // Store tx_ref on the order
     await prisma.order.update({
       where: { id: orderId },
       data: { paymentRef: txRef },

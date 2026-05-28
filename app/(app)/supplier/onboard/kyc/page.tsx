@@ -20,14 +20,19 @@ export default async function SupplierOnboardingStep2() {
   }
 
   const step = dbUser?.supplier?.onboardingStep
+  const kycStatus = dbUser?.supplier?.kycStatus
 
   // Guard: must have completed step 1 first
   if (!dbUser?.supplier || step === 'NOT_STARTED') redirect("/supplier/onboard")
 
-    if (step === 'TERMS_ACCEPTED' || step === "COMPLETED") redirect ("/supplier/dashboard")
-    if (step === 'FIRST_PRODUCT') redirect("/supplier/onboard/terms")
-  // Guard: already past this step
-    if (step === 'KYC_SUBMITTED') redirect("/supplier/onboard/products");
+  if (step === 'TERMS_ACCEPTED' || step === "COMPLETED") redirect("/supplier/dashboard")
+  if (step === 'FIRST_PRODUCT') redirect("/supplier/onboard/terms")
+
+  // REJECTED suppliers must be allowed back to re-submit — don't redirect them away.
+  // KYC_SUBMITTED guard: only redirect forward if status is still PENDING (not REJECTED).
+  if (step === 'KYC_SUBMITTED' && kycStatus !== 'REJECTED') {
+    redirect("/supplier/onboard/products")
+  }
     
 
   return <KycStep2Client />

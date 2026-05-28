@@ -69,6 +69,7 @@ export default async function AdminKYCPage() {
     businessDocType: s.businessDocType,
     // NEW: Bank Account Details
     bankName: s.bankName,
+    bankCode: s.bankCode,
     accountNumber: s.accountNumber,
     accountHolderName: s.accountHolderName,
     // Other fields

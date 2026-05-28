@@ -175,6 +175,7 @@ async function handleUpload(
       businessDocUrl:     `kyc-documents/${businessFileName}`,
       businessDocType:    businessDocType,
       bankName:           bankName,
+      bankCode:           bankCode ?? null,   // ← was missing — required for FLW subaccount creation
       accountNumber:      accountNumber,
       accountHolderName:  accountHolderName,
       onboardingStep:     "KYC_SUBMITTED",
