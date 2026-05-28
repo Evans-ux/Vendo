@@ -44,7 +44,7 @@ export default async function AdminKYCPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <p className="text-red-600">{result.error}</p>
         </div>
-      </div>
+    
     );
   }
 
