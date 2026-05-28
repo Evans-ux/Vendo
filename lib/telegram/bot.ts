@@ -200,7 +200,7 @@ async function chatWithAI(
         defaultHeaders: { "HTTP-Referer": "https://vendo.ng", "X-Title": "Vendo Vee AI" },
       });
       const completion = await openRouter.chat.completions.create({
-        model: "openrouter/auto",
+        model: "openrouter/free",
         messages,
         max_tokens: 512,
       });
