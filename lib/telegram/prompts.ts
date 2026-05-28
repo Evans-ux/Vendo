@@ -66,9 +66,12 @@ Analyze this image and provide:
 2. Color(s) and patterns
 3. Style category (casual, formal, streetwear, traditional, etc.)
 4. Key features or distinguishing details
-5. 3-5 search keywords that would help find similar items in a product catalog
+5. Search keywords for product catalog matching
 
-Be specific and concise. Format as a short paragraph, not a list. Focus on details that would help match this to products in a Nigerian fashion store.`;
+Be specific and concise. Format your response as a short paragraph followed by a final line in exactly this format:
+Keywords: [keyword1], [keyword2], [keyword3], [keyword4], [keyword5]
+
+Focus on details that would help match this to products in a Nigerian fashion store. The keywords should be the most useful terms for a product database search.`;
 
 export const IMAGE_GEN_ENHANCE_PROMPT = (userPrompt: string) =>
   `Fashion photography, Nigerian model wearing ${userPrompt}, clean studio background, professional lighting, high quality, 4k, fashion catalog style, vibrant colors`;

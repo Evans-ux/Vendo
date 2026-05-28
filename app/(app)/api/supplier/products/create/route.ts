@@ -79,7 +79,6 @@ export async function POST(request: NextRequest) {
         imageUrls,
         sizes,
         stock,
-        courierId,
         deliveryMethod,
         logisticsFee,
         isApproved: false,  // all new products undergo admin review

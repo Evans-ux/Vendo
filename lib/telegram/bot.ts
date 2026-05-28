@@ -78,7 +78,7 @@ async function getOllamaModel(): Promise<string> {
   }
 
   ollamaModelFetched = true;
-  return ollamaModelName;
+  return ollamaModelName ?? "llama3";
 }
 
 // ─── Conversation Memory (in-memory, resets on cold start) ──────────────────
@@ -214,7 +214,7 @@ async function chatWithAI(
       });
 
       const completion = await openRouter.chat.completions.create({
-        model: "openrouter/free",
+        model: "meta-llama/llama-3.1-8b-instruct:free",
         messages,
       });
 
@@ -251,7 +251,7 @@ async function analyzeImage(imageBuffer: Buffer): Promise<string> {
     const groq = new Groq({ apiKey: GROQ_KEY });
 
     const response = await groq.chat.completions.create({
-      model: "llama-3.2-90b-vision-preview",
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
       messages: [
         {
           role: "user",
@@ -293,7 +293,7 @@ async function analyzeImage(imageBuffer: Buffer): Promise<string> {
         });
 
         const response = await openRouter.chat.completions.create({
-          model: "openrouter/free",
+          model: "meta-llama/llama-3.2-11b-vision-instruct:free",
           messages: [
             {
               role: "user",
@@ -773,12 +773,33 @@ Thanks for shopping with Vendo! 🛍️`;
 // ─── Keyword Extraction Helper ───────────────────────────────────────────────
 
 /**
- * Extract meaningful search keywords from a vision analysis paragraph.
- * The Groq vision model returns a descriptive paragraph — we need to pull out
- * the product-relevant terms for database search.
+ * Extract meaningful search keywords from a Groq vision analysis.
+ *
+ * Three-strategy approach:
+ * 1. Parse the explicit "Keywords:" line Groq was asked to provide
+ * 2. Scan the paragraph for known fashion terms
+ * 3. Fall back to the first sentence cleaned of stop words
  */
 function extractSearchKeywords(analysis: string): string {
-  // Common fashion keywords to prioritize
+  // ── Strategy 1: Parse the structured keywords Groq was asked to provide ──
+  // GROQ_VISION_PROMPT asks for "3-5 search keywords" — Groq often ends with:
+  // "Keywords: sneakers, black, leather, casual" or "Search keywords: ..."
+  const keywordLineMatch = analysis.match(
+    /(?:keywords?|search terms?|tags?)[:\s]+([^\n.]+)/i
+  );
+  if (keywordLineMatch) {
+    const keywords = keywordLineMatch[1]
+      .split(/[,;]+/)
+      .map((k) => k.trim().toLowerCase())
+      .filter((k) => k.length > 1 && k.length < 30)
+      .slice(0, 6);
+    if (keywords.length >= 2) {
+      console.log(`[Keywords] Parsed from Groq structured output: ${keywords.join(", ")}`);
+      return keywords.join(" ");
+    }
+  }
+
+  // ── Strategy 2: Scan for known fashion terms ──────────────────────────────
   const fashionTerms = [
     "sneakers", "sneaker", "shoes", "shoe", "boot", "boots", "sandal", "sandals",
     "heels", "heel", "loafers", "slides", "flip-flops", "slippers",
@@ -805,26 +826,22 @@ function extractSearchKeywords(analysis: string): string {
   const analysisLower = analysis.toLowerCase();
   const foundTerms: string[] = [];
 
-  // Extract matching fashion terms from the analysis
   for (const term of fashionTerms) {
     if (analysisLower.includes(term) && !foundTerms.includes(term)) {
       foundTerms.push(term);
     }
   }
 
-  // If we found fashion terms, join them into a search string
   if (foundTerms.length > 0) {
-    // Limit to 6 most relevant terms to keep search focused
     const searchString = foundTerms.slice(0, 6).join(" ");
-    console.log(`[Keywords] Extracted ${foundTerms.length} terms: ${searchString}`);
+    console.log(`[Keywords] Extracted ${foundTerms.length} fashion terms: ${searchString}`);
     return searchString;
   }
 
-  // Fallback: use the first sentence of the analysis as a search query
+  // ── Strategy 3: First sentence, stop-words removed ────────────────────────
   const firstSentence = analysis.split(/[.!?]/)[0]?.trim() || analysis;
-  // Remove common non-searchable words
   const cleaned = firstSentence
-    .replace(/\b(the|this|is|a|an|it|has|with|and|or|in|on|for|of|to|are|was|were|been|being|have|that|from|which|very|also|its|these|those|can|will|may|just|more|most|some|any|all|each|both|few|other|such|than|too|only|same|into|over|after|about|out|up|down|one|two|three|four|five|image|shows|appears|features|looks|seems|photo|picture|appears)\b/gi, "")
+    .replace(/\b(the|this|is|a|an|it|has|with|and|or|in|on|for|of|to|are|was|were|been|being|have|that|from|which|very|also|its|these|those|can|will|may|just|more|most|some|any|all|each|both|few|other|such|than|too|only|same|into|over|after|about|out|up|down|one|two|three|four|five|image|shows|appears|features|looks|seems|photo|picture)\b/gi, "")
     .replace(/\s+/g, " ")
     .trim();
 
