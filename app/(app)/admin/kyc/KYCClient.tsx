@@ -129,7 +129,7 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
     if (pendingAction.type === "approve") {
       const result = await approveKYC(pendingAction.supplierId);
       if (result.success) {
-        toast.success("Supplier approved", { description: result.message });
+        toast.success("Supplier approved", { description: (result as any).message });
         // Surface subaccount warning separately so admin knows to follow up
         if ((result as any).warning) {
           setTimeout(() => {
