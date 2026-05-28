@@ -32,15 +32,13 @@ import {
 const TELEGRAM_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const GROQ_KEY = (process.env.GROQ_API ?? process.env.GROQ_API_KEY ?? "").trim();
 const HF_KEY = (process.env.HF_API_KEY || process.env.HUGGING_FACE_API || "").trim();
-const OLLAMA_URL = (process.env.OLLAMA_URL || "").replace(/\/v1.*$/, "").trim();
-const OLLAMA_KEY = process.env.OLLAMA_API_KEY || "";
+const OLLAMA_URL = (process.env.OLLAMA_URL || "https://ollama.com").replace(/\/+$/, "");
+const OLLAMA_KEY = (process.env.OLLAMA_API_KEY || "").trim();
 const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEY || "").trim();
 
-// Ollama is only usable if a real instance URL is configured (not blank, not the public site)
-const OLLAMA_AVAILABLE =
-  OLLAMA_URL.length > 0 &&
-  !OLLAMA_URL.includes("ollama.com") &&
-  !OLLAMA_URL.includes("ollama.ai");
+// Ollama Cloud is available when an API key is set.
+// The cloud endpoint is https://ollama.com/api — no local install needed.
+const OLLAMA_AVAILABLE = OLLAMA_KEY.length > 0;
 
 if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env");
 
@@ -58,34 +56,37 @@ async function getOllamaModel(): Promise<string> {
   if (ollamaModelFetched && ollamaModelName) return ollamaModelName;
 
   try {
-    const ollama = new Ollama({
-      host: OLLAMA_URL,
-      headers: OLLAMA_KEY ? { Authorization: `Bearer ${OLLAMA_KEY}` } : {},
+    // Use the OpenAI-compatible /v1/models endpoint on Ollama Cloud
+    const res = await fetch(`${OLLAMA_URL}/v1/models`, {
+      headers: { Authorization: `Bearer ${OLLAMA_KEY}` },
     });
 
-    const listResult = await ollama.list();
-    const models = (listResult.models || [])
-      .map((m: any) => (m.name || "").trim())
-      .filter((name: string) => name.length > 0); // Sanitize: remove empty strings
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    const models: string[] = (data.data || [])
+      .map((m: any) => (m.id || "").trim())
+      .filter((name: string) => name.length > 0);
 
     if (models.length > 0) {
-      // Prefer llama models, then any available model
-      const preferred = models.find((m: string) =>
-        m.toLowerCase().includes("llama")
-      );
-      ollamaModelName = preferred || models[0];
-      console.log(`[Ollama] Selected model: ${ollamaModelName} (from ${models.length} available: ${models.join(", ")})`);
+      // Prefer deepseek or llama cloud models
+      const preferred =
+        models.find((m) => m.includes("deepseek")) ||
+        models.find((m) => m.includes("llama")) ||
+        models[0];
+      ollamaModelName = preferred;
+      console.log(`[Ollama Cloud] Selected model: ${ollamaModelName} (${models.length} available)`);
     } else {
-      console.warn("[Ollama] No models found on the instance. Will use fallback.");
-      ollamaModelName = "llama3"; // Default guess
+      console.warn("[Ollama Cloud] No models found, using deepseek-v3.2");
+      ollamaModelName = "deepseek-v3.2";
     }
   } catch (error: any) {
-    console.warn(`[Ollama] Failed to fetch models: ${error.message}. Using default "llama3".`);
-    ollamaModelName = "llama3";
+    console.warn(`[Ollama Cloud] Failed to fetch models: ${error.message}. Using deepseek-v3.2`);
+    ollamaModelName = "deepseek-v3.2";
   }
 
   ollamaModelFetched = true;
-  return ollamaModelName ?? "llama3";
+  return ollamaModelName ?? "deepseek-v3.2";
 }
 
 // ─── Conversation Memory (in-memory, resets on cold start) ──────────────────
@@ -166,48 +167,55 @@ async function chatWithAI(
   userMessage: string,
   extraContext: string = ""
 ): Promise<string> {
-  // Build context-enriched user message
   const contextualMessage = extraContext
     ? `${userMessage}\n\n${extraContext}`
     : userMessage;
 
-  // Push user message to history (without the context blob)
   pushHistory(telegramId, { role: "user", content: userMessage });
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: VEE_AI_SYSTEM_PROMPT },
-    ...getHistory(telegramId).slice(0, -1), // history minus the one we just pushed
-    { role: "user", content: contextualMessage }, // the enriched version
+    ...getHistory(telegramId).slice(0, -1),
+    { role: "user", content: contextualMessage },
   ];
 
   let reply = "";
 
-  // ── Primary: Ollama ───────────────────────────────────────────────────
-  try {
-    const modelName = await getOllamaModel();
-    console.log(`[Ollama] Sending chat to model: ${modelName}`);
+  // ── Primary: Ollama Cloud ─────────────────────────────────────────────
+  // Uses the OpenAI-compatible endpoint at https://ollama.com/v1
+  // Requires OLLAMA_API_KEY from ollama.com/settings/api-keys
+  // Cloud models run on Ollama's servers — no local GPU needed
+  if (OLLAMA_AVAILABLE) {
+    try {
+      const modelName = await getOllamaModel();
+      console.log(`[Ollama Cloud] Sending chat to model: ${modelName}`);
 
-    const ollamaClient = new Ollama({
-      host: OLLAMA_URL,
-      headers: OLLAMA_KEY ? { Authorization: `Bearer ${OLLAMA_KEY}` } : {},
-    });
+      const ollamaCloud = new OpenAI({
+        baseURL: `${OLLAMA_URL}/v1`,
+        apiKey: OLLAMA_KEY,
+      });
 
-    const response = await ollamaClient.chat({
-      messages: messages as any[],
-      model: modelName,
-    });
+      const completion = await ollamaCloud.chat.completions.create({
+        model: modelName,
+        messages,
+      });
 
-    reply = sanitizeAIResponse(response.message?.content);
-    if (reply) {
-      console.log(`[Ollama] ✅ Got response (${reply.length} chars) from ${modelName}`);
-    } else {
-      console.warn(`[Ollama] ⚠️ Empty response from ${modelName}, falling back...`);
-      throw new Error("Ollama returned empty response");
+      reply = sanitizeAIResponse(completion.choices[0]?.message?.content);
+      if (reply) {
+        console.log(`[Ollama Cloud] ✅ Got response (${reply.length} chars) from ${modelName}`);
+      } else {
+        console.warn(`[Ollama Cloud] ⚠️ Empty response from ${modelName}, falling back...`);
+        throw new Error("Ollama Cloud returned empty response");
+      }
+    } catch (ollamaError: any) {
+      console.warn(`⚠️ Ollama Cloud failed: ${ollamaError.message}. Falling back to OpenRouter...`);
     }
-  } catch (ollamaError: any) {
-    console.warn(`⚠️ Ollama failed: ${ollamaError.message}. Falling back to OpenRouter...`);
+  } else {
+    console.log("[Chat] No OLLAMA_API_KEY set — using OpenRouter directly");
+  }
 
-    // ── Fallback: OpenRouter ──────────────────────────────────────────
+  // ── Fallback (or primary when Ollama is off): OpenRouter ─────────────
+  if (!reply) {
     try {
       if (!OPENROUTER_KEY) throw new Error("Missing OPENROUTER_API_KEY");
 
@@ -227,12 +235,12 @@ async function chatWithAI(
 
       reply = sanitizeAIResponse(completion.choices[0]?.message?.content);
       if (reply) {
-        console.log(`[OpenRouter] ✅ Fallback response (${reply.length} chars), model: ${completion.model}`);
+        console.log(`[OpenRouter] ✅ Response (${reply.length} chars), model: ${completion.model}`);
       } else {
-        console.warn("[OpenRouter] ⚠️ Empty response from fallback");
+        console.warn("[OpenRouter] ⚠️ Empty response");
       }
     } catch (orError: any) {
-      console.error("❌ Both Ollama and OpenRouter failed:", orError.message);
+      console.error("❌ OpenRouter failed:", orError.message);
     }
   }
 
@@ -240,9 +248,7 @@ async function chatWithAI(
     reply = "Sorry, I couldn't process that right now. Both AI services are a bit busy — please try again in a moment! 🙏";
   }
 
-  // Save assistant reply to history
   pushHistory(telegramId, { role: "assistant", content: reply });
-
   return reply;
 }
 

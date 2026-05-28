@@ -10,7 +10,7 @@ const TERMS_SECTIONS = [
   },
   {
     title: "2. Commission & Pricing",
-    content: `You agree that Vendo retains a 25% commission on every sale made through the platform. Your products will be listed at a selling price calculated as: Selling Price = Your Base Price × 1.25. You will receive your base price per unit sold, minus any applicable payment processing fees charged by our payment provider (Flutterwave). Vendo reserves the right to review and update the commission structure with 30 days' notice.`,
+    content: `You agree that Vendo retains a 10% commission on every sale made through the platform. Your products will be listed at a selling price calculated as: Selling Price = Your Base Price × 1.1111. You will receive your base price per unit sold, minus any applicable payment processing fees charged by our payment provider (Flutterwave). Vendo reserves the right to review and update the commission structure with 30 days' notice.`,
   },
   {
     title: "3. Product Standards",
