@@ -32,9 +32,15 @@ import {
 const TELEGRAM_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const GROQ_KEY = (process.env.GROQ_API ?? process.env.GROQ_API_KEY ?? "").trim();
 const HF_KEY = (process.env.HF_API_KEY || process.env.HUGGING_FACE_API || "").trim();
-const OLLAMA_URL = (process.env.OLLAMA_URL || "https://ollama.com").replace(/\/v1.*$/, "");
+const OLLAMA_URL = (process.env.OLLAMA_URL || "").replace(/\/v1.*$/, "").trim();
 const OLLAMA_KEY = process.env.OLLAMA_API_KEY || "";
 const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEY || "").trim();
+
+// Ollama is only usable if a real instance URL is configured (not blank, not the public site)
+const OLLAMA_AVAILABLE =
+  OLLAMA_URL.length > 0 &&
+  !OLLAMA_URL.includes("ollama.com") &&
+  !OLLAMA_URL.includes("ollama.ai");
 
 if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env");
 
@@ -48,6 +54,7 @@ let ollamaModelFetched = false;
  * Caches the result so we only fetch once per cold start.
  */
 async function getOllamaModel(): Promise<string> {
+  if (!OLLAMA_AVAILABLE) return "llama3"; // won't be used, just a placeholder
   if (ollamaModelFetched && ollamaModelName) return ollamaModelName;
 
   try {
