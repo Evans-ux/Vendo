@@ -123,6 +123,7 @@ export default function ReportsClient({
                 <Tooltip 
                   contentStyle={{ backgroundColor: "hsl(var(--popover))", borderColor: "hsl(var(--border))", borderRadius: "8px" }}
                   itemStyle={{ color: "hsl(var(--foreground))" }}
+                  labelStyle={{ color: "hsl(var(--foreground))", fontWeight: "bold", marginBottom: "4px" }}
                   formatter={(value: any) => [`₦${Number(value).toLocaleString()}`, "Revenue"]}
                 />
                 <Area type="monotone" dataKey="value" stroke="#f97316" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
@@ -149,7 +150,12 @@ export default function ReportsClient({
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
                     <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                     <YAxis dataKey="name" type="category" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                    <Tooltip cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} contentStyle={{ backgroundColor: "hsl(var(--popover))", borderRadius: "8px", borderColor: "hsl(var(--border))" }} />
+                    <Tooltip 
+                      cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} 
+                      contentStyle={{ backgroundColor: "hsl(var(--popover))", borderRadius: "8px", borderColor: "hsl(var(--border))" }} 
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                      labelStyle={{ color: "hsl(var(--foreground))", fontWeight: "bold" }}
+                    />
                     <Bar dataKey="sales" name="Units Sold" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -182,10 +188,10 @@ export default function ReportsClient({
                       <tr key={supplier.name} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-4 font-medium text-foreground truncate max-w-[120px]">{supplier.name}</td>
                         <td className="px-4 py-4 text-center">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            supplier.score >= 90 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                            supplier.score >= 80 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          <span className={`px-2.5 py-1 rounded-md border text-[10px] uppercase tracking-wider font-bold ${
+                            supplier.score >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-400 dark:border-emerald-400/20' :
+                            supplier.score >= 80 ? 'bg-orange-50 text-orange-800 border-orange-100 dark:bg-orange-400/10 dark:text-orange-400 dark:border-orange-400/20' :
+                            'bg-red-50 text-red-700 border-red-100 dark:bg-red-400/10 dark:text-red-400 dark:border-red-400/20'
                           }`}>
                             {supplier.score}/100
                           </span>

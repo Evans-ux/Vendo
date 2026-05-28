@@ -73,5 +73,38 @@ Keywords: [keyword1], [keyword2], [keyword3], [keyword4], [keyword5]
 
 Focus on details that would help match this to products in a Nigerian fashion store. The keywords should be the most useful terms for a product database search.`;
 
+/**
+ * Groq Query Intelligence Prompt
+ * Used to extract structured search parameters from any user message.
+ * Returns JSON so we can do precise DB queries instead of naive keyword matching.
+ */
+export const GROQ_QUERY_EXTRACT_PROMPT = `You are a product search assistant for Vendo, a Nigerian fashion e-commerce platform.
+
+Extract search parameters from the user's message and return ONLY valid JSON with this exact structure:
+{
+  "keywords": ["word1", "word2"],
+  "category": "Footwear|Tops|Bottoms|Dresses|Bags|Accessories|Jewelry|Other|null",
+  "colors": ["black", "white"],
+  "sizes": ["42", "M", "L"],
+  "maxPrice": 50000,
+  "minPrice": 0,
+  "isProductQuery": true
+}
+
+Rules:
+- keywords: 2-5 single words that describe the item (no phrases, no apostrophes)
+- category: pick the closest match or null
+- colors: only if mentioned
+- sizes: only if mentioned  
+- maxPrice/minPrice: extract from phrases like "under 20k", "between 10k-30k" (convert k to thousands)
+- isProductQuery: true if asking about products, false if general chat/greeting
+
+Examples:
+"show me black sneakers size 42 under 20k" → {"keywords":["sneakers","black"],"category":"Footwear","colors":["black"],"sizes":["42"],"maxPrice":20000,"minPrice":0,"isProductQuery":true}
+"I want a red ankara dress" → {"keywords":["ankara","dress","red"],"category":"Dresses","colors":["red"],"sizes":[],"maxPrice":null,"minPrice":0,"isProductQuery":true}
+"hello how are you" → {"keywords":[],"category":null,"colors":[],"sizes":[],"maxPrice":null,"minPrice":0,"isProductQuery":false}
+
+Return ONLY the JSON object, no explanation.`;
+
 export const IMAGE_GEN_ENHANCE_PROMPT = (userPrompt: string) =>
   `Fashion photography, Nigerian model wearing ${userPrompt}, clean studio background, professional lighting, high quality, 4k, fashion catalog style, vibrant colors`;

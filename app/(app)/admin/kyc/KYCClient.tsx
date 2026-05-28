@@ -267,6 +267,41 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
                       )}
                     </div>
 
+                    {/* Business Document */}
+                    <div className="px-6 py-4 border-b border-border">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                        {selected.businessDocType || "Business Document"}
+                      </p>
+                      {selected.businessDocUrl ? (
+                        selected.businessDocUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                          <img
+                            src={selected.businessDocUrl}
+                            alt="Business Document"
+                            className="w-full rounded-lg border border-border"
+                          />
+                        ) : (
+                          <div className="bg-muted/50 rounded-xl p-8 text-center border border-border">
+                            <p className="text-4xl mb-3">🏢</p>
+                            <p className="text-sm text-muted-foreground mb-4">Preview not available for this file type</p>
+                            <a
+                              href={selected.businessDocUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-foreground text-background text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
+                            >
+                              Open document ↗
+                            </a>
+                          </div>
+                        )
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">
+                          {selected.businessDocType
+                            ? `No ${selected.businessDocType} uploaded`
+                            : "No business document uploaded"}
+                        </p>
+                      )}
+                    </div>
+
                     {/* Business details */}
                     <div className="px-6 py-4 border-b border-border grid grid-cols-2 gap-3 text-sm">
                       {[

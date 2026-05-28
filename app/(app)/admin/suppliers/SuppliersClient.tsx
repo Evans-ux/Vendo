@@ -18,10 +18,24 @@ interface Supplier {
   productCount: number;
 }
 
-const KYC_BADGE: Record<string, string> = {
-  PENDING:  "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300",
-  APPROVED: "bg-green-100  dark:bg-green-900/30  text-green-700  dark:text-green-300",
-  REJECTED: "bg-red-100    dark:bg-red-900/30    text-red-700    dark:text-red-300",
+const getKycBadgeStyles = (status: string) => {
+  switch (status) {
+    case 'PENDING':
+      return 'bg-orange-50 text-orange-800 border-orange-100 dark:bg-orange-400/10 dark:text-orange-400 dark:border-orange-400/20';
+    case 'APPROVED':
+      return 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-400 dark:border-emerald-400/20';
+    case 'REJECTED':
+      return 'bg-red-50 text-red-700 border-red-100 dark:bg-red-400/10 dark:text-red-400 dark:border-red-400/20';
+    default:
+      return 'bg-muted text-muted-foreground border-transparent';
+  }
+};
+
+const getStatusBadgeStyles = (isActive: boolean) => {
+  if (isActive) {
+    return 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-400 dark:border-emerald-400/20';
+  }
+  return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
 };
 
 export default function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
@@ -130,7 +144,7 @@ export default function SuppliersClient({ suppliers }: { suppliers: Supplier[] }
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${KYC_BADGE[supplier.kycStatus] ?? KYC_BADGE.PENDING}`}>
+                        <span className={`px-2 py-1 rounded-md border text-[10px] uppercase tracking-wider font-bold ${getKycBadgeStyles(supplier.kycStatus)}`}>
                           {supplier.kycStatus}
                         </span>
                       </td>
@@ -138,11 +152,7 @@ export default function SuppliersClient({ suppliers }: { suppliers: Supplier[] }
                         <span className="text-sm text-foreground">{supplier.productCount}</span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          supplier.isActive
-                            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
-                            : "bg-muted text-muted-foreground"
-                        }`}>
+                        <span className={`px-2 py-1 rounded-md border text-[10px] uppercase tracking-wider font-bold ${getStatusBadgeStyles(supplier.isActive)}`}>
                           {supplier.isActive ? "Active" : "Inactive"}
                         </span>
                       </td>

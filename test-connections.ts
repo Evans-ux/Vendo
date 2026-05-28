@@ -1,142 +1,222 @@
+/**
+ * Vendo Service Connectivity Check
+ * Run: bun test-connections.ts
+ *
+ * Architecture: Ollama Cloud (chat) → OpenRouter (fallback) | Groq (vision) | HF (image gen)
+ */
+
 import 'dotenv/config';
 import { Telegraf } from 'telegraf';
 // @ts-ignore
 import Groq from 'groq-sdk';
-import { Ollama } from 'ollama';
 import { HfInference } from '@huggingface/inference';
-import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
 
-async function runTests() {
-  console.log('🛡️  Vendo Service Connectivity Check\n');
-  console.log('Architecture: Ollama (chat) → OpenRouter (fallback) | Groq (vision) | HF (image gen)\n');
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-  // 1. Telegram Bot
-  const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (tgToken && tgToken !== "BOT_TOKEN_PLACEHOLDER_FOR_BUILD") {
+const OK  = (label: string, msg: string) => console.log(`✅ ${label}: ${msg}`);
+const WARN = (label: string, msg: string) => console.warn(`⚠️  ${label}: ${msg}`);
+const FAIL = (label: string, msg: string) => console.error(`❌ ${label}: ${msg}`);
+
+function maskKey(key: string): string {
+  if (!key || key.length < 8) return '(empty)';
+  return key.slice(0, 6) + '...' + key.slice(-4);
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+async function runTests() {
+  console.log('\n🛡️  Vendo Service Connectivity Check');
+  console.log('   Architecture: Ollama Cloud (chat) → OpenRouter (fallback) | Groq (vision) | HF (image gen)');
+  console.log('─'.repeat(70) + '\n');
+
+  // ── 1. Telegram ──────────────────────────────────────────────────────────
+  const tgToken = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  if (!tgToken) {
+    WARN('Telegram', 'TELEGRAM_BOT_TOKEN is missing');
+  } else {
     try {
       const bot = new Telegraf(tgToken);
       const me = await bot.telegram.getMe();
-      console.log(`✅ Telegram: Connected as @${me.username}`);
+      OK('Telegram', `Connected as @${me.username} (id: ${me.id})`);
     } catch (e: any) {
-      console.error(`❌ Telegram: Failed. Check your token. Error: ${e.message}`);
+      FAIL('Telegram', `${e.message} — check your token`);
     }
+  }
+
+  // ── 2. Ollama Cloud (PRIMARY CHAT) ────────────────────────────────────────
+  const ollamaUrl = (process.env.OLLAMA_URL || 'https://ollama.com').replace(/\/+$/, '');
+  const ollamaKey = (process.env.OLLAMA_API_KEY || '').trim();
+
+  console.log(`\n   Ollama URL : ${ollamaUrl}`);
+  console.log(`   Ollama Key : ${maskKey(ollamaKey)}`);
+
+  if (!ollamaKey) {
+    WARN('Ollama Cloud [PRIMARY CHAT]', 'OLLAMA_API_KEY is missing — get one at ollama.com/settings/api-keys');
   } else {
-    console.warn('⚠️  Telegram: Token is missing or using a placeholder.');
-  }
+    try {
+      // Use OpenAI-compatible /v1/models endpoint
+      const res = await fetch(`${ollamaUrl}/v1/models`, {
+        headers: { Authorization: `Bearer ${ollamaKey}` },
+      });
 
-  // 2. Ollama (PRIMARY CHAT ENGINE)
-  const ollamaUrl = (process.env.OLLAMA_URL || "https://ollama.com").replace(/\/v1.*$/, "");
-  const ollamaKey = (process.env.OLLAMA_API_KEY || "").trim();
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
 
-  try {
-    const ollama = new Ollama({
-      host: ollamaUrl,
-      headers: ollamaKey ? { Authorization: `Bearer ${ollamaKey}` } : {},
-    });
+      const data = await res.json();
+      const models: string[] = (data.data || [])
+        .map((m: any) => (m.id || '').trim())
+        .filter((n: string) => n.length > 0);
 
-    const listResult = await ollama.list();
-    const models = (listResult.models || [])
-      .map((m: any) => (m.name || "").trim())
-      .filter((name: string) => name.length > 0);
+      OK('Ollama Cloud [PRIMARY CHAT]', `${models.length} cloud models available`);
+      console.log(`   Models: ${models.slice(0, 8).join(', ')}${models.length > 8 ? ` ... +${models.length - 8} more` : ''}`);
 
-    const isLocal = ollamaUrl.includes('127.0.0.1') || ollamaUrl.includes('localhost');
-    console.log(`✅ Ollama [PRIMARY CHAT]: SUCCESS (${isLocal ? 'Local' : 'Cloud'} API active)`);
-    console.log(`   Models available (${models.length}): ${models.join(', ') || 'none found'}`);
-
-    if (models.length > 0) {
-      // Quick chat test with the first model
-      try {
-        const testResponse = await ollama.chat({
-          model: models[0],
-          messages: [{ role: 'user', content: 'Respond with "Ollama is active"' }],
-        });
-        const reply = (testResponse.message?.content || "").trim();
-        console.log(`   Chat test (${models[0]}): "${reply || '(empty response)'}"`);
-      } catch (chatErr: any) {
-        console.warn(`   ⚠️ Chat test failed: ${chatErr.message}`);
-      }
+      // Pick a free model — gemma3:4b is free on Ollama Cloud
+      const testModel = models.find(m => m === 'gemma3:4b') ||
+        models.find(m => m === 'gemma3:12b') ||
+        models.find(m => m.includes('gemma3')) ||
+        models.find(m => m.includes('ministral-3:3b')) ||
+        models[0];
+        try {
+          const openai = new OpenAI({ baseURL: `${ollamaUrl}/v1`, apiKey: ollamaKey });
+          const completion = await openai.chat.completions.create({
+            model: testModel,
+            messages: [{ role: 'user', content: 'Reply with exactly: "Ollama Cloud is active"' }],
+          });
+          const reply = (completion.choices[0]?.message?.content || '').trim();
+          console.log(`   Chat test (${testModel}): "${reply || '(empty)'}"`);
+        } catch (chatErr: any) {
+          WARN('Ollama Cloud chat test', chatErr.message);
+        }
+      
     }
-  } catch (e: any) {
-    console.error(`❌ Ollama [PRIMARY CHAT]: Failed to connect to ${ollamaUrl}. Error: ${e.message}`);
+  catch (e: any) {
+      FAIL('Ollama Cloud [PRIMARY CHAT]', e.message);
+    }
   }
 
-  // 3. Groq AI (VISION ENGINE)
-  const groqKey = process.env.GROQ_API || process.env.GROQ_API_KEY;
-  if (groqKey) {
+  // ── 3. OpenRouter (CHAT FALLBACK) ─────────────────────────────────────────
+  const orKey = (process.env.OPENROUTER_API_KEY || '').trim();
+  console.log(`\n   OpenRouter Key: ${maskKey(orKey)}`);
+
+  if (!orKey) {
+    WARN('OpenRouter [CHAT FALLBACK]', 'OPENROUTER_API_KEY is missing — get a free key at openrouter.ai/keys');
+  } else {
+    try {
+      const or = new OpenAI({
+        baseURL: 'https://openrouter.ai/api/v1',
+        apiKey: orKey,
+        defaultHeaders: { 'HTTP-Referer': 'https://vendo.ng', 'X-Title': 'Vendo Test' },
+      });
+      const completion = await or.chat.completions.create({
+        model: 'openrouter/free',
+        messages: [{ role: 'user', content: 'Reply with exactly: "OpenRouter is active"' }],
+      });
+      const reply = (completion.choices[0]?.message?.content || '').trim();
+      OK('OpenRouter [CHAT FALLBACK]', `Model: ${completion.model} — "${reply || '(empty)'}"`);
+    } catch (e: any) {
+      FAIL('OpenRouter [CHAT FALLBACK]', e.message);
+    }
+  }
+
+  // ── 4. Groq (VISION ENGINE) ───────────────────────────────────────────────
+  const groqKey = (process.env.GROQ_API || process.env.GROQ_API_KEY || '').trim();
+  console.log(`\n   Groq Key: ${maskKey(groqKey)}`);
+
+  if (!groqKey) {
+    WARN('Groq [VISION]', 'GROQ_API key is missing');
+  } else {
     try {
       // @ts-ignore
       const groq = new Groq({ apiKey: groqKey });
-      if (!groqKey.startsWith('gsk_')) throw new Error("Groq key should start with 'gsk_'");
       const completion = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: 'Respond with "Groq is active"' }],
         model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: 'Reply with exactly: "Groq is active"' }],
       });
-      console.log(`✅ Groq AI [VISION]: SUCCESS - "${completion.choices?.[0]?.message?.content || 'Connected'}"`);
+      const reply = (completion.choices[0]?.message?.content || '').trim();
+      OK('Groq [VISION]', `"${reply || '(empty)'}"`);
     } catch (e: any) {
-      console.error(`❌ Groq AI [VISION]: Failed. Error: ${e.message}`);
+      FAIL('Groq [VISION]', e.message);
     }
-  } else {
-    console.warn('⚠️  Groq AI [VISION]: GROQ_API key is missing.');
   }
 
-  // 4. OpenRouter (CHAT FALLBACK)
-  const orKey = process.env.OPENROUTER_API_KEY;
-  if (orKey) {
-    try {
-      const or = new OpenAI({
-        baseURL: "https://openrouter.ai/api/v1",
-        apiKey: orKey,
-        defaultHeaders: {
-          "HTTP-Referer": "https://vendo.ng",
-          "X-Title": "Vendo Connection Test",
-        }
-      });
-      const completion = await or.chat.completions.create({
-        messages: [{ role: 'user', content: 'Respond with "OpenRouter is active"' }],
-        model: 'openrouter/free',
-      });
-      const usedModel = completion.model;
-      console.log(`✅ OpenRouter [CHAT FALLBACK]: SUCCESS (Routed to: ${usedModel}) - "${completion.choices?.[0]?.message?.content || 'Connected'}"`);
-    } catch (e: any) {
-      console.error(`❌ OpenRouter [CHAT FALLBACK]: Failed. Error: ${e.message}`);
-    }
-  } else {
-    console.warn('⚠️  OpenRouter [CHAT FALLBACK]: OPENROUTER_API_KEY is missing.');
-  }
-
-  // 5. Hugging Face (IMAGE GENERATION)
+  // ── 5. HuggingFace (IMAGE GENERATION) ────────────────────────────────────
   const hfKey = (process.env.HF_API_KEY || process.env.HUGGING_FACE_API || '').trim();
-  if (hfKey) {
-    if (!hfKey.startsWith('hf_')) {
-      console.error('❌ Hugging Face [IMAGE GEN]: Failed. Token must start with "hf_"');
-    } else {
-    try {
-      const hf = new HfInference(hfKey);
-      await hf.textToImage({
-        model: 'tencent/HunyuanImage-3.0',
-        inputs: 'A simple test prompt',
-      });
-      console.log('✅ Hugging Face [IMAGE GEN]: SUCCESS (Auth verified)');
-    } catch (e: any) {
-      console.error(`❌ Hugging Face [IMAGE GEN]: Failed. Error: ${e.message}`);
-    }
-    }
+  console.log(`\n   HuggingFace Key: ${maskKey(hfKey)}`);
+
+  if (!hfKey) {
+    WARN('HuggingFace [IMAGE GEN]', 'HF_API_KEY is missing');
+  } else if (!hfKey.startsWith('hf_')) {
+    FAIL('HuggingFace [IMAGE GEN]', 'Token must start with "hf_"');
   } else {
-    console.warn('⚠️  Hugging Face [IMAGE GEN]: HUGGING_FACE_API key is missing.');
+    try {
+      // Just verify auth — don't actually generate (costs credits)
+      const res = await fetch('https://huggingface.co/api/whoami-v2', {
+        headers: { Authorization: `Bearer ${hfKey}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      OK('HuggingFace [IMAGE GEN]', `Authenticated as ${data.name || data.login || 'user'} (auth verified, skipping actual generation to save credits)`);
+    } catch (e: any) {
+      FAIL('HuggingFace [IMAGE GEN]', e.message);
+    }
   }
 
-  // 6. Prisma DB
-  try {
-    const prisma = new PrismaClient();
-    await prisma.$queryRaw`SELECT 1`;
-    console.log('✅ Prisma DB: SUCCESS (Database connectivity active)');
-    await prisma.$disconnect();
-  } catch (e: any) {
-    console.error(`❌ Prisma DB: Failed. Error: ${e.message}`);
+  // ── 6. Prisma DB ──────────────────────────────────────────────────────────
+  const dbUrl = process.env.DATABASE_URL;
+  console.log(`\n   DB URL: ${dbUrl ? dbUrl.replace(/:([^:@]+)@/, ':***@') : '(missing)'}`);
+
+  if (!dbUrl) {
+    WARN('Prisma DB', 'DATABASE_URL is missing');
+  } else {
+    try {
+      // Dynamically import to ensure env is loaded first
+      const { PrismaClient: PC } = await import('@prisma/client');
+      const prisma = new PC();
+      await prisma.$queryRaw`SELECT 1`;
+
+      const [products, suppliers, users] = await Promise.all([
+        prisma.product.count(),
+        prisma.supplier.count(),
+        prisma.user.count(),
+      ]);
+
+      OK('Prisma DB', `Connected — ${products} products | ${suppliers} suppliers | ${users} users`);
+
+      const unapproved = await prisma.product.count({ where: { isApproved: false } });
+      const approved = await prisma.product.count({ where: { isApproved: true, isActive: true, stock: { gt: 0 } } });
+      console.log(`   Approved & searchable: ${approved} | Pending admin approval: ${unapproved}`);
+      if (unapproved > 0) {
+        WARN('Products', `${unapproved} product(s) pending admin approval — bot cannot find them until approved`);
+        console.log('   → Go to /admin/products and approve them');
+      }
+
+      await prisma.$disconnect();
+    } catch (e: any) {
+      FAIL('Prisma DB', e.message);
+    }
   }
 
-  console.log('\n🏁 Tests completed.');
+  // ── 7. Flutterwave ────────────────────────────────────────────────────────
+  const flwKey = (process.env.FLW_SECRET_KEY_TEST || process.env.FLW_SECRET_KEY_LIVE || '').trim();
+  console.log(`\n   Flutterwave Key: ${maskKey(flwKey)}`);
+
+  if (!flwKey) {
+    WARN('Flutterwave', 'FLW_SECRET_KEY_TEST is missing');
+  } else {
+    try {
+      const res = await fetch('https://api.flutterwave.com/v3/banks/NG?per_page=1', {
+        headers: { Authorization: `Bearer ${flwKey}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      OK('Flutterwave', `Auth verified (${process.env.FLW_MODE || 'test'} mode) — ${data.data?.length || 0} banks returned`);
+    } catch (e: any) {
+      FAIL('Flutterwave', e.message);
+    }
+  }
+
+  console.log('\n' + '─'.repeat(70));
+  console.log('🏁 Tests completed.\n');
 }
 
-runTests();
+runTests().catch(console.error);

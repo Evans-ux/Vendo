@@ -17,6 +17,8 @@ import {
 } from "./prompts";
 import {
   searchProducts,
+  searchProductsByParams,
+  extractSearchParams,
   getLatestProducts,
   formatProductsForAI,
   getOrCreateUser,
@@ -69,24 +71,27 @@ async function getOllamaModel(): Promise<string> {
       .filter((name: string) => name.length > 0);
 
     if (models.length > 0) {
-      // Prefer deepseek or llama cloud models
+      // Prefer free-tier models — gemma3:4b and ministral-3:3b are free on Ollama Cloud
       const preferred =
-        models.find((m) => m.includes("deepseek")) ||
-        models.find((m) => m.includes("llama")) ||
+        models.find((m) => m === "gemma3:4b") ||
+        models.find((m) => m === "ministral-3:3b") ||
+        models.find((m) => m === "gemma3:12b") ||
+        models.find((m) => m.includes("gemma3")) ||
+        models.find((m) => m.includes("ministral")) ||
         models[0];
       ollamaModelName = preferred;
       console.log(`[Ollama Cloud] Selected model: ${ollamaModelName} (${models.length} available)`);
     } else {
-      console.warn("[Ollama Cloud] No models found, using deepseek-v3.2");
-      ollamaModelName = "deepseek-v3.2";
+      console.warn("[Ollama Cloud] No models found, using gemma3:4b");
+      ollamaModelName = "gemma3:4b";
     }
   } catch (error: any) {
-    console.warn(`[Ollama Cloud] Failed to fetch models: ${error.message}. Using deepseek-v3.2`);
-    ollamaModelName = "deepseek-v3.2";
+    console.warn(`[Ollama Cloud] Failed to fetch models: ${error.message}. Using gemma3:4b`);
+    ollamaModelName = "gemma3:4b";
   }
 
   ollamaModelFetched = true;
-  return ollamaModelName ?? "deepseek-v3.2";
+  return ollamaModelName ?? "gemma3:4b";
 }
 
 // ─── Conversation Memory (in-memory, resets on cold start) ──────────────────
@@ -229,7 +234,7 @@ async function chatWithAI(
       });
 
       const completion = await openRouter.chat.completions.create({
-        model: "meta-llama/llama-3.1-8b-instruct:free",
+        model: "openrouter/free",
         messages,
       });
 
@@ -306,7 +311,7 @@ async function analyzeImage(imageBuffer: Buffer): Promise<string> {
         });
 
         const response = await openRouter.chat.completions.create({
-          model: "meta-llama/llama-3.2-11b-vision-instruct:free",
+          model: "openrouter/free",
           messages: [
             {
               role: "user",
@@ -596,8 +601,12 @@ Powered by Rocybits Technology 🚀`;
       const searchKeywords = extractSearchKeywords(analysis);
       console.log(`[Photo Handler] Extracted search keywords: "${searchKeywords}"`);
 
-      // Step 3: Search for matching products using the extracted keywords
-      const products = await searchProducts(searchKeywords, 5);
+      // Step 3: Use Ollama/OpenRouter to intelligently parse the vision output into structured search params
+      const searchParams = await extractSearchParams(searchKeywords);
+      console.log(`[Photo Handler] Smart search params:`, JSON.stringify(searchParams));
+
+      // Step 4: Search for matching products using structured params
+      const products = await searchProductsByParams(searchParams, 5);
       console.log(`[Photo Handler] Found ${products.length} matching products`);
 
       const catalog = formatProductsForAI(products);

@@ -54,7 +54,7 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
       value: stats.pendingKYC,
       subtitle: "Awaiting verification",
       icon: "📋",
-      color: "yellow",
+      color: "orange",
       link: "/admin/kyc",
     },
     {
@@ -145,12 +145,18 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
             <button
               key={stat.title}
               onClick={() => router.push(stat.link)}
-              className="bg-card rounded-xl border border-border p-6 hover:shadow-lg transition-shadow text-left"
+              className="group bg-card rounded-xl border border-border p-6 hover:shadow-lg hover:border-primary/20 transition-all text-left"
             >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-3xl">{stat.icon}</span>
                 <span
-                  className={`text-xs font-semibold px-2 py-1 rounded-full bg-${stat.color}-100 text-${stat.color}-700 dark:bg-${stat.color}-900/30 dark:text-${stat.color}-300`}
+                  className={`text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md border ${
+                    stat.color === 'blue' ? 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-400/10 dark:text-blue-400 dark:border-blue-400/20' :
+                    stat.color === 'orange' ? 'bg-orange-50 text-orange-800 border-orange-100 dark:bg-orange-400/10 dark:text-orange-400 dark:border-orange-400/20' :
+                    stat.color === 'purple' ? 'bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-400/10 dark:text-purple-400 dark:border-purple-400/20' :
+                    stat.color === 'green' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-400 dark:border-emerald-400/20' :
+                    'bg-muted text-muted-foreground'
+                  }`}
                 >
                   View
                 </span>
@@ -164,21 +170,21 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
 
         {/* Alerts */}
         {stats.pendingKYC > 0 && (
-          <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-5 shadow-sm">
+          <div className="bg-orange-50 border-2 border-orange-200 dark:bg-orange-950/20 dark:border-orange-900/50 rounded-xl p-5 shadow-sm">
             <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+              <div className="flex-shrink-0 w-12 h-12 bg-orange-100 dark:bg-orange-900/40 rounded-full flex items-center justify-center">
                 <span className="text-2xl">⚠️</span>
               </div>
               <div className="flex-1">
-                <h3 className="font-bold text-yellow-900 text-lg mb-2">
+                <h3 className="font-bold text-orange-900 dark:text-orange-100 text-lg mb-2">
                   {stats.pendingKYC} New Supplier{stats.pendingKYC > 1 ? "s" : ""} Awaiting Verification
                 </h3>
-                <p className="text-sm text-yellow-800 mb-3">
+                <p className="text-sm text-orange-800 dark:text-orange-200/80 mb-3">
                   Review their onboarding information, business details, and KYC documents before approving.
                 </p>
                 <button
                   onClick={() => router.push("/admin/kyc")}
-                  className="px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
+                  className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
                 >
                   Review Suppliers Now →
                 </button>
@@ -188,15 +194,15 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
         )}
 
         {stats.pendingProducts > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="bg-blue-50 border border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/50 rounded-xl p-4">
             <div className="flex items-start gap-3">
               <span className="text-2xl">📦</span>
               <div className="flex-1">
-                <h3 className="font-semibold text-blue-900 mb-1">
+                <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
                   {stats.pendingProducts} Product{stats.pendingProducts > 1 ? "s" : ""} Awaiting
                   Approval
                 </h3>
-                <p className="text-sm text-blue-700 mb-3">
+                <p className="text-sm text-blue-700 dark:text-blue-200/80 mb-3">
                   New products need to be reviewed before going live.
                 </p>
                 <button
@@ -218,10 +224,16 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
               <button
                 key={action.title}
                 onClick={() => router.push(action.link)}
-                className="bg-card rounded-xl border border-border p-6 hover:shadow-lg transition-shadow text-left"
+                className="group bg-card rounded-xl border border-border p-6 hover:shadow-lg hover:border-primary/20 transition-all text-left"
               >
                 <div
-                  className={`w-12 h-12 rounded-lg bg-${action.color}-100 dark:bg-${action.color}-900/30 flex items-center justify-center text-2xl mb-4`}
+                  className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl mb-4 transition-transform group-hover:scale-110 ${
+                    action.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                    action.color === 'purple' ? 'bg-purple-100 dark:bg-purple-900/30' :
+                    action.color === 'green' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
+                    action.color === 'orange' ? 'bg-orange-100 dark:bg-orange-900/30' :
+                    'bg-muted'
+                  }`}
                 >
                   {action.icon}
                 </div>

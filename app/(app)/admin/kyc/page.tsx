@@ -23,12 +23,25 @@ export default async function AdminKYCPage() {
     redirect("/supplier/dashboard");
   }
 
+  // Helper to generate signed URLs for private documents
+  const generateSignedUrl = async (filePath: string | null) => {
+    if (!filePath) return null;
+    const { data, error } = await supabase.storage
+      .from('kyc-documents') // Assuming 'kyc-documents' is your private bucket name
+      .createSignedUrl(filePath, 3600); // URL valid for 1 hour
+
+    if (error) {
+      console.error("Error generating signed URL:", error);
+      return null;
+    }
+    return data?.signedUrl || null;
+  };
+
   const result = await getPendingKYC();
 
   if (!result.success) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
           <p className="text-red-600">{result.error}</p>
         </div>
       </div>
@@ -36,7 +49,11 @@ export default async function AdminKYCPage() {
   }
 
   // Serialize suppliers with ALL onboarding data
-  const suppliers = result.suppliers!.map((s: any) => ({
+  const suppliers = await Promise.all(result.suppliers!.map(async (s: any) => {
+    const kycDocSignedUrl = await generateSignedUrl(s.kycDocUrl);
+    const businessDocSignedUrl = await generateSignedUrl(s.businessDocUrl);
+
+    return {
     id: s.id,
     businessName: s.businessName,
     phone: s.phone,
@@ -44,11 +61,11 @@ export default async function AdminKYCPage() {
     state: s.state,
     supplierType: s.supplierType,
     kycStatus: s.kycStatus,
-    kycDocUrl: s.kycDocUrl,
+    kycDocUrl: kycDocSignedUrl, // Use signed URL
     kycDocType: s.kycDocType,
     kycSubmittedAt: s.kycSubmittedAt?.toISOString() || null,
     // NEW: Business Verification
-    businessDocUrl: s.businessDocUrl,
+    businessDocUrl: businessDocSignedUrl, // Use signed URL
     businessDocType: s.businessDocType,
     // NEW: Bank Account Details
     bankName: s.bankName,
@@ -61,7 +78,8 @@ export default async function AdminKYCPage() {
     storeBannerUrl: s.storeBannerUrl,
     termsAcceptedAt: s.termsAcceptedAt?.toISOString() || null,
     createdAt: s.createdAt?.toISOString() || null,
-    user: s.user,
+    user: s.user, // Assuming user object is already serialized or safe to pass
+    };
   }));
 
   return <KYCClient suppliers={suppliers} />;
