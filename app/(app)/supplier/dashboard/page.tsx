@@ -49,6 +49,23 @@ export default async function SupplierDashboardPage() {
     _sum: { amount: true },
   });
 
+  // Recent orders for this supplier (shown directly on dashboard)
+  const recentOrders = await prisma.order.findMany({
+    where: {
+      items: { some: { product: { supplierId: s.id } } },
+      paymentStatus: "PAID",
+    },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    include: {
+      user: { select: { name: true, phone: true } },
+      items: {
+        where: { product: { supplierId: s.id } },
+        include: { product: { select: { name: true, imageUrls: true } } },
+      },
+    },
+  });
+
   // Infer the product type directly from the Prisma result
   type PrismaProduct = (typeof s.products)[number];
 
@@ -99,5 +116,20 @@ export default async function SupplierDashboardPage() {
     pendingBalance={Number(pendingAgg._sum.amount ?? 0)}
     totalEarned={Number(s.totalEarned)}
     hasPin={!!s.withdrawalPin}
+    recentOrders={recentOrders.map((o) => ({
+      id: o.id,
+      orderNumber: (o as any).orderNumber || o.id.slice(0, 8).toUpperCase(),
+      status: o.status as string,
+      paymentStatus: o.paymentStatus as string,
+      totalAmount: Number(o.totalAmount),
+      customerName: o.user.name || "Customer",
+      customerPhone: o.user.phone || "",
+      createdAt: o.createdAt.toISOString(),
+      items: o.items.map((item) => ({
+        name: item.product.name,
+        image: item.product.imageUrls[0] || null,
+        quantity: item.quantity,
+      })),
+    }))}
   />;
 }

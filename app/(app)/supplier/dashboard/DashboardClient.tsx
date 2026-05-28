@@ -45,6 +45,17 @@ interface DashboardClientProps {
   pendingBalance: number;
   totalEarned: number;
   hasPin: boolean;
+  recentOrders: Array<{
+    id: string;
+    orderNumber: string;
+    status: string;
+    paymentStatus: string;
+    totalAmount: number;
+    customerName: string;
+    customerPhone: string;
+    createdAt: string;
+    items: Array<{ name: string; image: string | null; quantity: number }>;
+  }>;
 }
 
 const KYC_STATUS_STYLES: Record<string, string> = {
@@ -59,7 +70,7 @@ const KYC_STATUS_LABELS: Record<string, string> = {
   REJECTED: "Rejected",
 };
 
-export default function DashboardClient({ supplier, productCount, walletBalance, pendingBalance, totalEarned, hasPin }: DashboardClientProps) {
+export default function DashboardClient({ supplier, productCount, walletBalance, pendingBalance, totalEarned, hasPin, recentOrders }: DashboardClientProps) {
   const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -218,6 +229,67 @@ export default function DashboardClient({ supplier, productCount, walletBalance,
             </button>
           </div>
         )}
+
+        {/* ── Recent Orders ── */}
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-foreground">Recent Orders</h3>
+            <button
+              onClick={() => router.push("/supplier/orders")}
+              className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+            >
+              View all →
+            </button>
+          </div>
+
+          {recentOrders.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-4xl mb-3">📦</p>
+              <p className="text-sm font-semibold text-foreground mb-1">No orders yet</p>
+              <p className="text-xs text-muted-foreground">Orders from customers will appear here once paid</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentOrders.map((order) => {
+                const statusColors: Record<string, string> = {
+                  PENDING:    "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
+                  CONFIRMED:  "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                  SHIPPED:    "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+                  DELIVERED:  "bg-green-500/10 text-green-600 dark:text-green-400",
+                  CANCELLED:  "bg-red-500/10 text-red-600 dark:text-red-400",
+                };
+                const statusColor = statusColors[order.status] ?? "bg-muted text-muted-foreground";
+
+                return (
+                  <div key={order.id} className="flex items-center gap-4 p-3 rounded-xl border border-border bg-background hover:bg-accent/20 transition-colors">
+                    {/* Product thumbnail */}
+                    {order.items[0]?.image ? (
+                      <img src={order.items[0].image} alt={order.items[0].name} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 text-xl">📦</div>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {order.items.map(i => i.name).join(", ")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        #{order.orderNumber} · {order.customerName}
+                      </p>
+                    </div>
+
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-bold text-brand-orange">₦{order.totalAmount.toLocaleString()}</p>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColor}`}>
+                        {order.status}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* ── Products preview ── */}
         {supplier.products.length > 0 && (

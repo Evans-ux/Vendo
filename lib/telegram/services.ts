@@ -51,21 +51,25 @@ export async function extractSearchParams(
 
   let raw = "";
 
-  // ── Primary: Ollama Cloud ──────────────────────────────────────────────
+  // ── Primary: Ollama Cloud (native API) ────────────────────────────────
   if (OLLAMA_AVAILABLE) {
     try {
-      const ollamaClient = new OpenAI({
-        baseURL: `${OLLAMA_URL}/v1`,
-        apiKey: OLLAMA_KEY,
+      const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OLLAMA_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gemma3:4b",
+          messages,
+          stream: false,
+        }),
       });
-      // Use a fast, free model for query extraction
-      const completion = await ollamaClient.chat.completions.create({
-        model: "gemma3:4b",
-        messages,
-        max_tokens: 200,
-        temperature: 0.1,
-      });
-      raw = (completion.choices[0]?.message?.content || "").trim();
+
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${await res.text()}`);
+      const data = await res.json();
+      raw = (data.message?.content || "").trim();
     } catch (err: any) {
       console.warn(`[Query Extract] Ollama failed: ${err.message}`);
     }

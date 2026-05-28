@@ -55,41 +55,48 @@ async function runTests() {
     WARN('Ollama Cloud [PRIMARY CHAT]', 'OLLAMA_API_KEY is missing — get one at ollama.com/settings/api-keys');
   } else {
     try {
-      // Use OpenAI-compatible /v1/models endpoint
-      const res = await fetch(`${ollamaUrl}/v1/models`, {
+      // Native Ollama API: GET /api/tags lists available models
+      const res = await fetch(`${ollamaUrl}/api/tags`, {
         headers: { Authorization: `Bearer ${ollamaKey}` },
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
 
       const data = await res.json();
-      const models: string[] = (data.data || [])
-        .map((m: any) => (m.id || '').trim())
+      // Native format: { models: [{ name: "gemma3:4b" }] }
+      const models: string[] = (data.models || [])
+        .map((m: any) => (m.name || '').trim())
         .filter((n: string) => n.length > 0);
 
       OK('Ollama Cloud [PRIMARY CHAT]', `${models.length} cloud models available`);
       console.log(`   Models: ${models.slice(0, 8).join(', ')}${models.length > 8 ? ` ... +${models.length - 8} more` : ''}`);
 
-      // Pick a free model — gemma3:4b is free on Ollama Cloud
+      // Quick chat test using native /api/chat
       const testModel = models.find(m => m === 'gemma3:4b') ||
-        models.find(m => m === 'gemma3:12b') ||
         models.find(m => m.includes('gemma3')) ||
-        models.find(m => m.includes('ministral-3:3b')) ||
+        models.find(m => m.includes('ministral')) ||
         models[0];
+
+      if (testModel) {
         try {
-          const openai = new OpenAI({ baseURL: `${ollamaUrl}/v1`, apiKey: ollamaKey });
-          const completion = await openai.chat.completions.create({
-            model: testModel,
-            messages: [{ role: 'user', content: 'Reply with exactly: "Ollama Cloud is active"' }],
+          const chatRes = await fetch(`${ollamaUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ollamaKey}` },
+            body: JSON.stringify({
+              model: testModel,
+              messages: [{ role: 'user', content: 'Reply with exactly: "Ollama Cloud is active"' }],
+              stream: false,
+            }),
           });
-          const reply = (completion.choices[0]?.message?.content || '').trim();
+          if (!chatRes.ok) throw new Error(`HTTP ${chatRes.status}`);
+          const chatData = await chatRes.json();
+          const reply = (chatData.message?.content || '').trim();
           console.log(`   Chat test (${testModel}): "${reply || '(empty)'}"`);
         } catch (chatErr: any) {
           WARN('Ollama Cloud chat test', chatErr.message);
         }
-      
-    }
-  catch (e: any) {
+      }
+    } catch (e: any) {
       FAIL('Ollama Cloud [PRIMARY CHAT]', e.message);
     }
   }

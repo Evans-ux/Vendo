@@ -40,8 +40,12 @@ const OLLAMA_KEY = (process.env.OLLAMA_API_KEY || "").trim();
 const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEY || "").trim();
 
 // Ollama Cloud is available when an API key is set.
-// The cloud endpoint is https://ollama.com/api — no local install needed.
+// Per Ollama docs: cloud API uses https://ollama.com/api (native) 
+// The OpenAI-compatible endpoint is https://ollama.com/v1 with Bearer auth
 const OLLAMA_AVAILABLE = OLLAMA_KEY.length > 0;
+// Use the native Ollama API format for cloud — NOT the /v1 OpenAI-compat path
+// which only works for local instances
+const OLLAMA_NATIVE_BASE = OLLAMA_URL; // https://ollama.com
 
 if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env");
 
@@ -55,24 +59,24 @@ let ollamaModelFetched = false;
  * Caches the result so we only fetch once per cold start.
  */
 async function getOllamaModel(): Promise<string> {
-  if (!OLLAMA_AVAILABLE) return "llama3"; // won't be used, just a placeholder
+  if (!OLLAMA_AVAILABLE) return "gemma3:4b";
   if (ollamaModelFetched && ollamaModelName) return ollamaModelName;
 
   try {
-    // Use the OpenAI-compatible /v1/models endpoint on Ollama Cloud
-    const res = await fetch(`${OLLAMA_URL}/v1/models`, {
+    // Native Ollama API: GET /api/tags lists available models
+    const res = await fetch(`${OLLAMA_NATIVE_BASE}/api/tags`, {
       headers: { Authorization: `Bearer ${OLLAMA_KEY}` },
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
-    const models: string[] = (data.data || [])
-      .map((m: any) => (m.id || "").trim())
+    // Native format: { models: [{ name: "gemma3:4b", ... }] }
+    const models: string[] = (data.models || [])
+      .map((m: any) => (m.name || "").trim())
       .filter((name: string) => name.length > 0);
 
     if (models.length > 0) {
-      // Prefer free-tier models — gemma3:4b and ministral-3:3b are free on Ollama Cloud
       const preferred =
         models.find((m) => m === "gemma3:4b") ||
         models.find((m) => m === "ministral-3:3b") ||
@@ -80,7 +84,7 @@ async function getOllamaModel(): Promise<string> {
         models.find((m) => m.includes("gemma3")) ||
         models.find((m) => m.includes("ministral")) ||
         models[0];
-      ollamaModelName = preferred;
+      ollamaModelName = preferred ?? models[0];
       console.log(`[Ollama Cloud] Selected model: ${ollamaModelName} (${models.length} available)`);
     } else {
       console.warn("[Ollama Cloud] No models found, using gemma3:4b");
@@ -199,26 +203,35 @@ async function chatWithAI(
 
   let reply = "";
 
-  // ── Primary: Ollama Cloud ─────────────────────────────────────────────
-  // Uses the OpenAI-compatible endpoint at https://ollama.com/v1
-  // Requires OLLAMA_API_KEY from ollama.com/settings/api-keys
-  // Cloud models run on Ollama's servers — no local GPU needed
+  // ── Primary: Ollama Cloud (native API) ───────────────────────────────
+  // Per docs: https://ollama.com/api/generate with Bearer auth
+  // NOT /v1 — that's only for local instances
   if (OLLAMA_AVAILABLE) {
     try {
       const modelName = await getOllamaModel();
       console.log(`[Ollama Cloud] Sending chat to model: ${modelName}`);
 
-      const ollamaCloud = new OpenAI({
-        baseURL: `${OLLAMA_URL}/v1`,
-        apiKey: OLLAMA_KEY,
+      const res = await fetch(`${OLLAMA_NATIVE_BASE}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OLLAMA_KEY}`,
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages,
+          stream: false,
+        }),
       });
 
-      const completion = await ollamaCloud.chat.completions.create({
-        model: modelName,
-        messages,
-      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`${res.status} ${errText}`);
+      }
 
-      reply = sanitizeAIResponse(completion.choices[0]?.message?.content);
+      const data = await res.json();
+      reply = sanitizeAIResponse(data.message?.content);
+
       if (reply) {
         console.log(`[Ollama Cloud] ✅ Got response (${reply.length} chars) from ${modelName}`);
       } else {
@@ -438,31 +451,62 @@ Powered by Rocybits Technology 🚀`;
   // ── /shop — Browse latest products ─────────────────────────────────────
   bot.command("shop", async (ctx) => {
     await withTyping(ctx, "typing", async () => {
-      const products = await getLatestProducts(5);
-      const catalog = formatProductsForAI(products);
+      const products = await getLatestProducts(8);
 
-      const reply = await chatWithAI(
-        String(ctx.from.id),
-        "Show me the latest products available in the store",
-        catalog
+      if (products.length === 0) {
+        await ctx.reply("🛍️ No products available right now. Check back soon!");
+        return;
+      }
+
+      await ctx.reply(
+        `🛍️ *Latest Products (${products.length} items)*\n\nTap *🛒 Order* under any product to buy it!`,
+        { parse_mode: "Markdown" }
       );
 
-      await ctx.reply(truncate(sanitizeMarkdown(reply)), { parse_mode: "Markdown" });
+      // Send each product as a separate photo with its own Order button
+      for (const product of products) {
+        const sizes = typeof product.sizes === "object" && product.sizes !== null
+          ? (product.sizes as { available?: string[] }).available?.join(", ") || "Various"
+          : "Various";
+        const delivery = product.supplier.supplierType === "LOCAL" ? "2-3 days" : "14-21 days";
 
-      // Send first product image if available
-      if (products.length > 0 && products[0].imageUrls[0]) {
-        try {
-          await ctx.replyWithPhoto(products[0].imageUrls[0], {
-            caption: `*${products[0].name}*\n₦${Number(products[0].sellingPrice).toLocaleString()}`,
+        const caption =
+          `*${product.name}*\n` +
+          `💰 ₦${Number(product.sellingPrice).toLocaleString()}\n` +
+          `📏 Sizes: ${sizes}\n` +
+          `🚚 ${delivery} · ${product.supplier.businessName}`;
+
+        if (product.imageUrls[0]) {
+          try {
+            await ctx.replyWithPhoto(product.imageUrls[0], {
+              caption,
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: "🛒 Order This", callback_data: `order:${product.id}` }
+                ]]
+              }
+            });
+          } catch {
+            // Image failed — send as text with button
+            await ctx.reply(caption, {
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: "🛒 Order This", callback_data: `order:${product.id}` }
+                ]]
+              }
+            });
+          }
+        } else {
+          await ctx.reply(caption, {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [[
-                { text: "🛒 Order This", callback_data: `order:${products[0].id}` }
+                { text: "🛒 Order This", callback_data: `order:${product.id}` }
               ]]
             }
           });
-        } catch {
-          // Image URL might be expired or invalid — skip silently
         }
       }
     });
@@ -701,42 +745,88 @@ Powered by Rocybits Technology 🚀`;
     });
   });
 
-  // ── Inline button handler — "🛒 Order This" ───────────────────────────
+  // ── Inline button handler — "🛒 Order This" + "✅ I Received My Order" ──
   bot.on("callback_query", async (ctx) => {
     const data = (ctx.callbackQuery as any).data as string;
-    if (!data?.startsWith("order:")) return;
+    if (!data) return;
 
-    const productId = data.replace("order:", "");
-    const telegramId = String(ctx.from.id);
+    // ── Order button ──────────────────────────────────────────────────
+    if (data.startsWith("order:")) {
+      const productId = data.replace("order:", "");
+      const telegramId = String(ctx.from.id);
 
-    // Acknowledge the button tap immediately
-    await ctx.answerCbQuery("Starting your order... 🛍️");
+      await ctx.answerCbQuery("Starting your order... 🛍️");
 
-    // Validate product
-    const { prisma } = await import("@/lib/prisma");
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-      include: { supplier: { select: { businessName: true, supplierType: true } } },
-    });
+      const { prisma } = await import("@/lib/prisma");
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+        include: { supplier: { select: { businessName: true, supplierType: true } } },
+      });
 
-    if (!product || !product.isApproved || !product.isActive || product.stock < 1) {
-      await ctx.reply("❌ Sorry, that product is no longer available.");
+      if (!product || !product.isApproved || !product.isActive || product.stock < 1) {
+        await ctx.reply("❌ Sorry, that product is no longer available.");
+        return;
+      }
+
+      const delivery = product.supplier.supplierType === "LOCAL" ? "2-3 business days" : "14-21 business days";
+      checkoutState.set(telegramId, { productId, step: "phone" });
+
+      await ctx.reply(
+        `🛍️ *${product.name}*\n` +
+        `💰 ₦${Number(product.sellingPrice).toLocaleString()}\n` +
+        `🏪 ${product.supplier.businessName}\n` +
+        `🚚 Delivery: ${delivery}\n\n` +
+        `📱 *What's your phone number?*\n_(e.g. 08012345678)_`,
+        { parse_mode: "Markdown" }
+      );
       return;
     }
 
-    const delivery = product.supplier.supplierType === "LOCAL" ? "2-3 business days" : "14-21 business days";
+    // ── "I Received My Order" button ──────────────────────────────────
+    if (data.startsWith("received:")) {
+      const orderId = data.replace("received:", "");
+      const telegramId = String(ctx.from.id);
 
-    // Start checkout flow
-    checkoutState.set(telegramId, { productId, step: "phone" });
+      await ctx.answerCbQuery("Processing your confirmation... ✅");
 
-    await ctx.reply(
-      `🛍️ *${product.name}*\n` +
-      `💰 ₦${Number(product.sellingPrice).toLocaleString()}\n` +
-      `🏪 ${product.supplier.businessName}\n` +
-      `🚚 Delivery: ${delivery}\n\n` +
-      `📱 *What's your phone number?*\n_(e.g. 08012345678)_`,
-      { parse_mode: "Markdown" }
-    );
+      try {
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://vendo.com.ng";
+        const secret = process.env.INTERNAL_API_SECRET ?? "";
+
+        const res = await fetch(`${siteUrl}/api/supplier/wallet/confirm-delivery`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-secret": secret,
+          },
+          body: JSON.stringify({ orderId }),
+        });
+
+        const result = await res.json();
+
+        if (!res.ok) {
+          await ctx.reply(`❌ ${result.message || "Could not confirm delivery. Please try again."}`);
+          return;
+        }
+
+        // Edit the original message to remove the button
+        try {
+          await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+        } catch { /* message may be too old to edit */ }
+
+        await ctx.reply(
+          `✅ *Delivery Confirmed!*\n\n` +
+          `Thank you for confirming receipt of your order! 🙏\n\n` +
+          `The supplier's payment has been released and is now pending a 24-hour review period before they can withdraw.\n\n` +
+          `We hope you love your purchase! Type /orders to view your order history.`,
+          { parse_mode: "Markdown" }
+        );
+      } catch (err: any) {
+        console.error("Delivery confirmation error:", err);
+        await ctx.reply("❌ Something went wrong. Please try again or contact support.");
+      }
+      return;
+    }
   });
 
   // ── Text message handler — Main AI chat with product search ────────────

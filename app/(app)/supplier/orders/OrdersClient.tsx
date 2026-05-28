@@ -56,14 +56,25 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
     const result = await updateOrderStatus(orderId, newStatus);
 
     if (result.success) {
-      toast.success("Order status updated", {
-        description: result.message,
-      });
+      toast.success("Order status updated", { description: result.message });
+
+      // When supplier marks SHIPPED — notify customer on Telegram
+      if (newStatus === "SHIPPED") {
+        try {
+          await fetch("/api/supplier/orders/notify-shipped", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId }),
+          });
+          toast.info("Customer notified on Telegram 📱");
+        } catch {
+          // Non-critical — don't block the status update
+        }
+      }
+
       router.refresh();
     } else {
-      toast.error("Failed to update order", {
-        description: result.error,
-      });
+      toast.error("Failed to update order", { description: result.error });
     }
     setUpdatingOrder(null);
   };
@@ -246,7 +257,22 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                   {/* Status Update */}
                   <div className="flex flex-wrap gap-2 pt-4 border-t border-border">
                     <p className="text-sm text-muted-foreground w-full mb-2">Update Status:</p>
-                    {STATUS_OPTIONS.filter((s) => s.value !== order.status).map((status) => (
+
+                    {/* Prominent "Mark as Shipped" button */}
+                    {order.status === "CONFIRMED" && (
+                      <button
+                        onClick={() => handleStatusUpdate(order.id, "SHIPPED")}
+                        disabled={updatingOrder === order.id}
+                        className="w-full py-3 rounded-xl bg-brand-orange hover:bg-brand-orange/90 text-white font-bold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2 mb-2"
+                      >
+                        🚚 {updatingOrder === order.id ? "Updating..." : "Mark as Shipped — Notify Customer"}
+                      </button>
+                    )}
+
+                    {/* Other status buttons */}
+                    {STATUS_OPTIONS.filter((s) =>
+                      s.value !== order.status && s.value !== "SHIPPED"
+                    ).map((status) => (
                       <button
                         key={status.value}
                         onClick={() => handleStatusUpdate(order.id, status.value)}
@@ -256,6 +282,17 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                         {updatingOrder === order.id ? "Updating..." : `Mark as ${status.label}`}
                       </button>
                     ))}
+
+                    {/* Shipped button (non-prominent) when not CONFIRMED */}
+                    {order.status !== "CONFIRMED" && order.status !== "SHIPPED" && order.status !== "DELIVERED" && order.status !== "CANCELLED" && (
+                      <button
+                        onClick={() => handleStatusUpdate(order.id, "SHIPPED")}
+                        disabled={updatingOrder === order.id}
+                        className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/20 disabled:opacity-50"
+                      >
+                        {updatingOrder === order.id ? "Updating..." : "Mark as Shipped"}
+                      </button>
+                    )}
                   </div>
                 </div>
               );

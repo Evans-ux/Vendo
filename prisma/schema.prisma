@@ -156,6 +156,10 @@ model Supplier {
   accountNumber     String? // 10-digit NUBAN account number
   accountHolderName String? // Flutterwave-verified account name
 
+  // Flutterwave subaccount ID — created when KYC is approved
+  // Used for automatic split payments (supplier gets 90%, platform keeps 10%)
+  flwSubaccountId   String?
+
   // ── Wallet & Payouts ──────────────────────────────────────────────────────
   // walletBalance = accumulated earnings not yet withdrawn
   // Credited when an order is marked DELIVERED (basePrice amount)

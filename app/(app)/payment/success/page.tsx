@@ -18,7 +18,10 @@ export default async function PaymentSuccessPage({
     })
   }
 
+  const orderNumber = (order as any)?.orderNumber || order?.id?.slice(0, 8).toUpperCase()
+
   return (
+    // No layout wrapper — this is a standalone page, no navbar
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-card rounded-3xl border border-border card-shadow-lg p-8 text-center">
@@ -31,6 +34,9 @@ export default async function PaymentSuccessPage({
           </div>
 
           <h1 className="text-2xl font-bold text-foreground mb-2">Payment Successful!</h1>
+          {orderNumber && (
+            <p className="text-sm font-semibold text-brand-orange mb-1">Order #{orderNumber}</p>
+          )}
           <p className="text-muted mb-6">
             Your order has been confirmed. The supplier will prepare your items shortly.
           </p>
@@ -71,21 +77,26 @@ export default async function PaymentSuccessPage({
             </div>
           )}
 
+          {/* What happens next */}
+          <div className="bg-brand-orange/5 border border-brand-orange/20 rounded-xl p-4 mb-6 text-left">
+            <p className="text-sm font-semibold text-brand-orange mb-2">What happens next?</p>
+            <ol className="space-y-1.5 text-sm text-muted">
+              <li className="flex gap-2"><span className="text-brand-orange font-bold">1.</span> Supplier prepares your item</li>
+              <li className="flex gap-2"><span className="text-brand-orange font-bold">2.</span> Item is dispatched to you</li>
+              <li className="flex gap-2"><span className="text-brand-orange font-bold">3.</span> Confirm receipt on Telegram to release payment to supplier</li>
+            </ol>
+          </div>
+
           <div className="space-y-3">
             <Link
               href="/"
               className="block w-full py-3 bg-brand-orange hover:bg-brand-orange-hover text-white font-semibold rounded-xl transition-colors"
             >
-              Continue Shopping
+              Back to Home
             </Link>
-            {orderId && (
-              <Link
-                href={`/orders/${orderId}`}
-                className="block w-full py-3 border border-border text-muted hover:text-foreground hover:bg-surface font-medium rounded-xl transition-colors"
-              >
-                Track Order
-              </Link>
-            )}
+            <p className="text-xs text-muted">
+              Track your order by messaging <strong>@VeeVendo_bot</strong> on Telegram and typing /orders
+            </p>
           </div>
 
         </div>
