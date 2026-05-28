@@ -26,6 +26,7 @@ import {
   formatUserProfileForAI,
   getUserOrders,
   createOrder,
+  generatePaymentLink,
   updateUserLocation
 } from "./services";
 
@@ -117,6 +118,18 @@ function pushHistory(telegramId: string, msg: ChatMessage) {
   }
   conversations.set(telegramId, history);
 }
+
+// ─── Checkout State Machine ───────────────────────────────────────────────────
+// Tracks multi-step checkout conversations per user
+
+interface CheckoutState {
+  productId: string;
+  step: "phone" | "address" | "confirm";
+  phone?: string;
+  address?: string;
+}
+
+const checkoutState = new Map<string, CheckoutState>();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -439,7 +452,15 @@ Powered by Rocybits Technology 🚀`;
       // Send first product image if available
       if (products.length > 0 && products[0].imageUrls[0]) {
         try {
-          await ctx.replyWithPhoto(products[0].imageUrls[0]);
+          await ctx.replyWithPhoto(products[0].imageUrls[0], {
+            caption: `*${products[0].name}*\n₦${Number(products[0].sellingPrice).toLocaleString()}`,
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [[
+                { text: "🛒 Order This", callback_data: `order:${products[0].id}` }
+              ]]
+            }
+          });
         } catch {
           // Image URL might be expired or invalid — skip silently
         }
@@ -629,12 +650,18 @@ Powered by Rocybits Technology 🚀`;
 
       await ctx.reply(truncate(sanitizeMarkdown(reply)), { parse_mode: "Markdown" });
 
-      // Send matching product images
+      // Send matching product images with Order buttons
       for (const product of products.slice(0, 3)) {
         if (product.imageUrls[0]) {
           try {
             await ctx.replyWithPhoto(product.imageUrls[0], {
-              caption: `${product.name} — ₦${Number(product.sellingPrice).toLocaleString()}`,
+              caption: `*${product.name}*\n₦${Number(product.sellingPrice).toLocaleString()}`,
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: "🛒 Order This", callback_data: `order:${product.id}` }
+                ]]
+              }
             });
           } catch {
             // Skip invalid image URLs
@@ -674,113 +701,198 @@ Powered by Rocybits Technology 🚀`;
     });
   });
 
+  // ── Inline button handler — "🛒 Order This" ───────────────────────────
+  bot.on("callback_query", async (ctx) => {
+    const data = (ctx.callbackQuery as any).data as string;
+    if (!data?.startsWith("order:")) return;
+
+    const productId = data.replace("order:", "");
+    const telegramId = String(ctx.from.id);
+
+    // Acknowledge the button tap immediately
+    await ctx.answerCbQuery("Starting your order... 🛍️");
+
+    // Validate product
+    const { prisma } = await import("@/lib/prisma");
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { supplier: { select: { businessName: true, supplierType: true } } },
+    });
+
+    if (!product || !product.isApproved || !product.isActive || product.stock < 1) {
+      await ctx.reply("❌ Sorry, that product is no longer available.");
+      return;
+    }
+
+    const delivery = product.supplier.supplierType === "LOCAL" ? "2-3 business days" : "14-21 business days";
+
+    // Start checkout flow
+    checkoutState.set(telegramId, { productId, step: "phone" });
+
+    await ctx.reply(
+      `🛍️ *${product.name}*\n` +
+      `💰 ₦${Number(product.sellingPrice).toLocaleString()}\n` +
+      `🏪 ${product.supplier.businessName}\n` +
+      `🚚 Delivery: ${delivery}\n\n` +
+      `📱 *What's your phone number?*\n_(e.g. 08012345678)_`,
+      { parse_mode: "Markdown" }
+    );
+  });
+
   // ── Text message handler — Main AI chat with product search ────────────
   bot.on(message("text"), async (ctx) => {
     const userMessage = ctx.message.text;
     const telegramId = String(ctx.from.id);
 
-    // Detect "Order [ID] [Phone] [Address]" or variations
-    const orderMatch = userMessage.match(/(?:order|buy|get)\s+([a-z0-9-]{20,})(?:\s+([\d+]{10,}))?(?:\s+(?:at|to|address)\s+(.+))?/i);
-    const idOnlyMatch = !orderMatch && userMessage.length > 20 && userMessage.match(/^[a-z0-9-]{20,}$/i);
+    // ── Checkout state machine ─────────────────────────────────────────
+    // Pending checkout: { productId, step: 'phone'|'address'|'confirm' }
+    const pending = checkoutState.get(telegramId);
 
-    if (orderMatch || idOnlyMatch) {
-      const productId = orderMatch ? orderMatch[1] : userMessage.trim();
-      const phone = orderMatch?.[2];
-      const address = orderMatch?.[3];
-
-      if (!phone || !address) {
+    if (pending) {
+      if (pending.step === "phone") {
+        // Validate Nigerian phone number
+        const phone = userMessage.trim().replace(/\s/g, "");
+        if (!/^(\+234|0)[789][01]\d{8}$/.test(phone)) {
+          await ctx.reply(
+            "❌ That doesn't look like a valid Nigerian phone number.\n\nPlease enter your phone number (e.g. 08012345678 or +2348012345678):"
+          );
+          return;
+        }
+        checkoutState.set(telegramId, { ...pending, phone, step: "address" });
         await ctx.reply(
-          "📦 *Almost there!* To process your order, I need your phone number and delivery address.\n\n" +
-          "Please reply in this format:\n" +
-          `\`order ${productId} [phone] at [address]\`\n\n` +
-          "Example:\n" +
-          `\`order ${productId} 08012345678 at 123 Awka Road, Onitsha\``,
+          "📍 *Delivery Address*\n\nPlease type your full delivery address:\n\n_Example: 12 Awka Road, Onitsha, Anambra_",
           { parse_mode: "Markdown" }
         );
         return;
       }
 
-      try {
-        await ctx.reply("⏳ Processing your order request...");
-        const order = await createOrder(telegramId, productId, phone, address);
-        
-        const successMsg = `✅ *Order Placed Successfully!*
+      if (pending.step === "address") {
+        const address = userMessage.trim();
+        if (address.length < 10) {
+          await ctx.reply("Please enter a more complete address (street, city, state):");
+          return;
+        }
+        checkoutState.set(telegramId, { ...pending, address, step: "confirm" });
 
-Order ID: \`${order.id}\`
-Item: *${(order as any).items[0].product.name}*
-Total: *₦${Number(order.totalAmount).toLocaleString()}*
-Phone: *${phone}*
-Delivery to: *${address}*
+        // Show order summary for confirmation
+        const { prisma } = await import("@/lib/prisma");
+        const product = await prisma.product.findUnique({
+          where: { id: pending.productId },
+          include: { supplier: { select: { businessName: true } } },
+        });
 
-What happens next?
-1. Our team will verify the availability with the supplier.
-2. You will receive a payment link here shortly.
-3. Type /orders to track your status.
+        if (!product) {
+          checkoutState.delete(telegramId);
+          await ctx.reply("❌ Sorry, that product is no longer available.");
+          return;
+        }
 
-Thanks for shopping with Vendo! 🛍️`;
-
-        await ctx.reply(successMsg, { parse_mode: "Markdown" });
+        await ctx.reply(
+          `📋 *Order Summary*\n\n` +
+          `🛍️ *${product.name}*\n` +
+          `💰 ₦${Number(product.sellingPrice).toLocaleString()}\n` +
+          `🏪 ${product.supplier.businessName}\n` +
+          `📱 Phone: ${pending.phone}\n` +
+          `📍 Deliver to: ${address}\n\n` +
+          `Reply *YES* to confirm and get your payment link, or *NO* to cancel.`,
+          { parse_mode: "Markdown" }
+        );
         return;
-      } catch (err: any) {
-        console.error("Order creation failed:", err);
-        await ctx.reply("❌ Sorry, I couldn't process that order. The Product ID might be incorrect or the item is out of stock.");
+      }
+
+      if (pending.step === "confirm") {
+        const answer = userMessage.trim().toUpperCase();
+
+        if (answer === "NO" || answer === "CANCEL") {
+          checkoutState.delete(telegramId);
+          await ctx.reply("❌ Order cancelled. No worries — just tell me what you're looking for! 😊");
+          return;
+        }
+
+        if (answer === "YES" || answer === "CONFIRM" || answer === "Y") {
+          checkoutState.delete(telegramId);
+          await ctx.reply("⏳ Creating your order and generating payment link...");
+
+          try {
+            const order = await createOrder(
+              telegramId,
+              pending.productId,
+              pending.phone,
+              pending.address
+            );
+
+            // Generate Flutterwave payment link
+            const paymentLink = await generatePaymentLink(order.id);
+
+            const productName = (order as any).items[0]?.product?.name ?? "Item";
+            await ctx.reply(
+              `✅ *Order Created!*\n\n` +
+              `Order: *#${(order as any).orderNumber}*\n` +
+              `Item: *${productName}*\n` +
+              `Total: *₦${Number(order.totalAmount).toLocaleString()}*\n\n` +
+              `💳 *Tap below to pay securely:*\n${paymentLink}\n\n` +
+              `⏰ Payment link expires in 30 minutes.\n` +
+              `Type /orders to track your order after payment.`,
+              { parse_mode: "Markdown" }
+            );
+          } catch (err: any) {
+            console.error("Order/payment error:", err);
+            await ctx.reply(
+              `❌ Sorry, something went wrong: ${err.message}\n\nPlease try again or contact support.`
+            );
+          }
+          return;
+        }
+
+        // Unrecognised response
+        await ctx.reply("Please reply *YES* to confirm or *NO* to cancel.", { parse_mode: "Markdown" });
         return;
       }
     }
 
+    // ── Regular AI chat ────────────────────────────────────────────────
     try {
       await withTyping(ctx, "typing", async () => {
-        // Get or create user
-        const user = await getOrCreateUser(
-          telegramId,
-          ctx.from.first_name,
-          ctx.from.last_name
-        );
+        const user = await getOrCreateUser(telegramId, ctx.from.first_name, ctx.from.last_name);
         const profile = formatUserProfileForAI(user);
 
-        // Search products based on the user's message
-        const products = await searchProducts(userMessage, 5);
-        const catalog = formatProductsForAI(products);
+        // Fast heuristic: skip AI query extraction for obvious non-product messages
+        const lowerMsg = userMessage.toLowerCase();
+        const isLikelyProductQuery = /\b(show|find|want|need|looking|buy|order|price|cheap|sneaker|shoe|shirt|dress|bag|trouser|jean|jacket|cap|watch|ring|necklace|ankara|agbada|kaftan|under|below|above|₦|naira)\b/.test(lowerMsg);
 
-        // Build context
+        let products: any[] = [];
+        if (isLikelyProductQuery) {
+          products = await searchProducts(userMessage, 5);
+        }
+
+        const catalog = formatProductsForAI(products);
         const extraContext = `${catalog}\n\n${profile}`;
 
-        // Get AI response (Ollama primary → OpenRouter fallback)
         const reply = await chatWithAI(telegramId, userMessage, extraContext);
-        console.log(`[Bot] Final reply from AI for user ${telegramId}: ${reply.substring(0, 100)}...`);
+        console.log(`[Bot] Reply for ${telegramId}: ${reply.substring(0, 80)}...`);
 
         await ctx.reply(truncate(sanitizeMarkdown(reply)), { parse_mode: "Markdown" });
-        console.log(`[Bot] Message sent to Telegram for user ${telegramId}`);
 
-        // If products were found and the message seems like a product query,
-        // send the first product image
-        if (products.length > 0 && products[0].imageUrls[0]) {
-          const searchTerms = ["show", "find", "want", "need", "looking", "shoe", "shirt", "dress", "sneaker", "bag", "watch", "cap"];
-          const isProductQuery = searchTerms.some((term) =>
-            userMessage.toLowerCase().includes(term)
-          );
-
-          if (isProductQuery) {
-            try {
-              await ctx.replyWithPhoto(products[0].imageUrls[0], {
-                caption: `${products[0].name} — ₦${Number(products[0].sellingPrice).toLocaleString()}`,
-              });
-            } catch {
-              // Skip invalid image URLs
-            }
-          }
+        // Send first product image if products found
+        if (products.length > 0 && products[0].imageUrls[0] && isLikelyProductQuery) {
+          try {
+            await ctx.replyWithPhoto(products[0].imageUrls[0], {
+              caption: `*${products[0].name}*\n₦${Number(products[0].sellingPrice).toLocaleString()}`,
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: "🛒 Order This", callback_data: `order:${products[0].id}` }
+                ]]
+              }
+            });
+          } catch { /* skip invalid URLs */ }
         }
       });
     } catch (error) {
       console.error("Chat error:", error);
-      // Attempt to send a fallback message even if the primary reply failed
       try {
-        await ctx.reply(
-          "😅 Oops, something went wrong on my end. Try again in a moment! (Error logged)"
-        );
-      } catch (fallbackReplyError) {
-        console.error("❌ Failed to send fallback error message:", fallbackReplyError);
-      }
+        await ctx.reply("😅 Oops, something went wrong. Try again in a moment!");
+      } catch { /* ignore */ }
     }
   });
 

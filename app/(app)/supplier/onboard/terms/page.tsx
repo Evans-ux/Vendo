@@ -24,11 +24,12 @@ export default async function SupplierTermsPage() {
   // Guard: must have at least submitted KYC to reach terms
   if (!dbUser?.supplier || step === 'NOT_STARTED') redirect("/supplier/onboard")
   if (step === 'PROFILE_COMPLETE') redirect("/supplier/onboard/kyc")
-  if (step === 'KYC_SUBMITTED') redirect("/supplier/onboard/products")
+  // Note: KYC_SUBMITTED can reach terms if they skipped the product step
+  // (skip-product API advances step to FIRST_PRODUCT before navigating here)
 
   // Guard: already accepted terms
   if (step === 'TERMS_ACCEPTED' || step === 'COMPLETED') redirect("/supplier/dashboard")
 
-  // step === 'FIRST_PRODUCT' (or KYC_SUBMITTED skipped products) — show terms
+  // step === 'FIRST_PRODUCT' or 'KYC_SUBMITTED' — show terms
   return <TermsAndConditions />
 }

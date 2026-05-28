@@ -264,6 +264,9 @@ model Order {
   id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId String @db.Uuid
 
+  // Human-readable order number — generated at creation time
+  orderNumber String @unique @default("")
+
   totalAmount Decimal     @db.Decimal(10, 2)
   status      OrderStatus @default(PENDING)
 

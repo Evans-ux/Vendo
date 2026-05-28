@@ -369,7 +369,18 @@ export default function ProductStep3Client() {
       {/* Submit */}
       <div className="flex gap-4 pt-6 border-t border-muted/20">
         <Button type="button" variant="outline" onClick={() => router.push("/supplier/onboard/kyc")} className="flex-1">Back</Button>
-        <Button type="button" variant="outline" onClick={() => router.push("/supplier/onboard/terms")} className="flex-1">Skip for now</Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={async () => {
+            // Advance step so terms page guard lets us through
+            await fetch("/api/supplier/onboard/skip-product", { method: "POST" });
+            router.push("/supplier/onboard/terms");
+          }}
+          className="flex-1"
+        >
+          Skip for now
+        </Button>
         <Button type="submit" disabled={isSubmitting} className="flex-1 bg-brand-orange hover:bg-brand-orange/90 text-white">
           {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Creating...</> : "Save & Continue"}
         </Button>

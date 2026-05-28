@@ -321,12 +321,27 @@ export async function createOrder(
   address?: string
 ) {
   const user = await getOrCreateUser(telegramId);
-  const product = await prisma.product.findUnique({ where: { id: productId } });
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    include: { supplier: true },
+  });
   if (!product) throw new Error("Product not found");
+  if (!product.isApproved || !product.isActive) throw new Error("Product is not available");
+  if (product.stock < 1) throw new Error("Product is out of stock");
+
+  // Generate a human-readable order number
+  const count = await prisma.order.count();
+  const orderNumber = `VND-${String(count + 1).padStart(6, "0")}`;
+
+  // Update user phone if provided
+  if (phone) {
+    await prisma.user.update({ where: { id: user.id }, data: { phone } });
+  }
 
   return prisma.order.create({
     data: {
       userId: user.id,
+      orderNumber,
       totalAmount: product.sellingPrice,
       status: "PENDING",
       paymentStatus: "UNPAID",
@@ -335,8 +350,78 @@ export async function createOrder(
         create: { productId: product.id, quantity: 1, unitPrice: product.sellingPrice },
       },
     },
-    include: { items: { include: { product: true } } },
+    include: {
+      items: { include: { product: { include: { supplier: true } } } },
+      user: { select: { email: true, name: true, phone: true } },
+    },
   });
+}
+
+/**
+ * Generate a Flutterwave payment link for an order.
+ * Called directly from the bot after order creation.
+ */
+export async function generatePaymentLink(orderId: string): Promise<string> {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://vendo.com.ng";
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      user: { select: { email: true, name: true, phone: true } },
+      items: { include: { product: { select: { name: true } } } },
+    },
+  });
+
+  if (!order) throw new Error("Order not found");
+  if (order.paymentStatus === "PAID") throw new Error("Order already paid");
+
+  const FLW_SECRET =
+    process.env.FLW_MODE === "production"
+      ? process.env.FLW_SECRET_KEY_LIVE
+      : process.env.FLW_SECRET_KEY_TEST;
+
+  if (!FLW_SECRET) throw new Error("Flutterwave secret key not configured");
+
+  const txRef = `vendo_${order.id}_${Date.now()}`;
+  const productNames = order.items.map((i) => i.product.name).join(", ");
+
+  const res = await fetch("https://api.flutterwave.com/v3/payments", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${FLW_SECRET}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      tx_ref: txRef,
+      amount: Number(order.totalAmount),
+      currency: "NGN",
+      redirect_url: `${siteUrl}/api/flutterwave/callback`,
+      customer: {
+        email: order.user.email,
+        name: order.user.name ?? undefined,
+        phone_number: order.user.phone ?? undefined,
+      },
+      meta: { orderId: order.id, userId: order.userId },
+      customizations: {
+        title: "Vendo Payment",
+        description: `Payment for: ${productNames}`,
+        logo: `${siteUrl}/vendo-logo.png`,
+      },
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || data.status !== "success") {
+    throw new Error(data.message ?? `Flutterwave error ${res.status}`);
+  }
+
+  // Store tx_ref on the order
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { paymentRef: txRef },
+  });
+
+  return data.data.link as string;
 }
 
 export async function updateUserLocation(telegramId: string, lat: number, lng: number) {
