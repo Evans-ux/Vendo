@@ -4,13 +4,6 @@
 // Groq is ONLY used for vision (image analysis)
 
 import prisma from "@/lib/prisma";
-import OpenAI from "openai";
-import { GROQ_QUERY_EXTRACT_PROMPT } from "./prompts";
-
-const OLLAMA_URL = (process.env.OLLAMA_URL || "https://ollama.com").replace(/\/+$/, "");
-const OLLAMA_KEY = (process.env.OLLAMA_API_KEY || "").trim();
-const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEY || "").trim();
-const OLLAMA_AVAILABLE = OLLAMA_KEY.length > 0;
 
 // ─── AI-Powered Query Intelligence ───────────────────────────────────────────
 // Uses Ollama Cloud (primary) → OpenRouter (fallback) to extract structured
@@ -26,95 +19,85 @@ export interface SmartSearchParams {
   isProductQuery: boolean;
 }
 
-/**
- * Use Ollama/OpenRouter to intelligently extract structured search params
- * from any user message. Much smarter than naive keyword splitting.
- */
-export async function extractSearchParams(
-  userMessage: string
-): Promise<SmartSearchParams> {
-  // Simple fallback — used if both AI services fail
-  const fallback: SmartSearchParams = {
-    keywords: userMessage
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length >= 2)
-      .slice(0, 5),
-    isProductQuery: true,
+// ─── Fast Local Query Parser (replaces AI round-trip) ────────────────────────
+//
+// Extracts structured search params from natural language in <1ms using
+// regex + keyword lists. Accurate enough for a shopping bot — no AI needed.
+
+const CATEGORY_MAP: Record<string, string> = {
+  sneaker: "Footwear", sneakers: "Footwear", shoe: "Footwear", shoes: "Footwear",
+  boot: "Footwear", boots: "Footwear", sandal: "Footwear", sandals: "Footwear",
+  heel: "Footwear", heels: "Footwear", loafer: "Footwear", loafers: "Footwear",
+  slipper: "Footwear", slippers: "Footwear", slide: "Footwear", slides: "Footwear",
+  shirt: "Tops", tshirt: "Tops", polo: "Tops", blouse: "Tops", top: "Tops",
+  hoodie: "Tops", sweater: "Tops", cardigan: "Tops", blazer: "Tops",
+  dress: "Dresses", gown: "Dresses", jumpsuit: "Dresses",
+  trouser: "Bottoms", trousers: "Bottoms", jean: "Bottoms", jeans: "Bottoms",
+  pant: "Bottoms", pants: "Bottoms", short: "Bottoms", shorts: "Bottoms",
+  skirt: "Bottoms", jogger: "Bottoms", joggers: "Bottoms",
+  bag: "Bags", handbag: "Bags", backpack: "Bags", purse: "Bags", clutch: "Bags",
+  watch: "Accessories", cap: "Accessories", hat: "Accessories",
+  belt: "Accessories", sunglasses: "Accessories", glasses: "Accessories",
+  necklace: "Jewelry", bracelet: "Jewelry", ring: "Jewelry", earring: "Jewelry",
+  ankara: "Dresses", agbada: "Tops", kaftan: "Tops", dashiki: "Tops",
+};
+
+const COLORS = new Set([
+  "black","white","red","blue","green","yellow","pink","purple","brown",
+  "grey","gray","navy","beige","gold","silver","orange","cream","burgundy",
+  "maroon","teal","coral","nude","khaki","olive",
+]);
+
+const STOP_WORDS = new Set([
+  "i","me","my","want","need","show","find","get","buy","order","please",
+  "can","you","have","do","a","an","the","is","are","for","of","in","on",
+  "with","and","or","some","any","give","looking","something","like","nice",
+  "good","best","cheap","affordable","quality","new","latest","trending",
+]);
+
+export function extractSearchParams(userMessage: string): SmartSearchParams {
+  const lower = userMessage.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+  const words = lower.split(/\s+/).filter(w => w.length >= 2);
+
+  // Extract price: "under 20k", "below 15000", "max 30k", "between 10k and 20k"
+  let maxPrice: number | null = null;
+  let minPrice = 0;
+  const priceMatch = lower.match(/(?:under|below|max|less than)\s*(\d+)\s*k?/);
+  if (priceMatch) maxPrice = parseInt(priceMatch[1]) * (lower.includes("k") ? 1000 : 1);
+  const betweenMatch = lower.match(/between\s*(\d+)\s*k?\s*(?:and|to|-)\s*(\d+)\s*k?/);
+  if (betweenMatch) {
+    minPrice = parseInt(betweenMatch[1]) * 1000;
+    maxPrice = parseInt(betweenMatch[2]) * 1000;
+  }
+
+  // Extract sizes: "size 42", "size L", "XL", "UK 9"
+  const sizes: string[] = [];
+  const sizeMatch = lower.match(/\b(?:size\s+)?(\d{2}|xs|s\b|m\b|l\b|xl|xxl|uk\s*\d+)\b/gi);
+  if (sizeMatch) sizes.push(...sizeMatch.map(s => s.replace(/size\s*/i, "").trim().toUpperCase()));
+
+  // Detect category and colors
+  let category: string | null = null;
+  const colors: string[] = [];
+  const keywords: string[] = [];
+
+  for (const word of words) {
+    if (STOP_WORDS.has(word)) continue;
+    if (COLORS.has(word)) { colors.push(word); continue; }
+    if (CATEGORY_MAP[word]) { category = CATEGORY_MAP[word]; keywords.push(word); continue; }
+    if (word.length >= 3) keywords.push(word);
+  }
+
+  const isProductQuery = keywords.length > 0 || colors.length > 0 || category !== null;
+
+  return {
+    keywords: keywords.slice(0, 5),
+    category,
+    colors,
+    sizes,
+    maxPrice,
+    minPrice,
+    isProductQuery,
   };
-
-  const messages = [
-    { role: "system" as const, content: GROQ_QUERY_EXTRACT_PROMPT },
-    { role: "user" as const, content: userMessage },
-  ];
-
-  let raw = "";
-
-  // ── Primary: Ollama Cloud (native API) ────────────────────────────────
-  if (OLLAMA_AVAILABLE) {
-    try {
-      const res = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OLLAMA_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gemma3:4b",
-          messages,
-          stream: false,
-        }),
-      });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${await res.text()}`);
-      const data = await res.json();
-      raw = (data.message?.content || "").trim();
-    } catch (err: any) {
-      console.warn(`[Query Extract] Ollama failed: ${err.message}`);
-    }
-  }
-
-  // ── Fallback: OpenRouter ───────────────────────────────────────────────
-  if (!raw && OPENROUTER_KEY) {
-    try {
-      const orClient = new OpenAI({
-        baseURL: "https://openrouter.ai/api/v1",
-        apiKey: OPENROUTER_KEY,
-        defaultHeaders: { "HTTP-Referer": "https://vendo.ng", "X-Title": "Vendo Vee AI" },
-      });
-      const completion = await orClient.chat.completions.create({
-        model: "openrouter/auto",
-        messages,
-        max_tokens: 200,
-        temperature: 0.1,
-      });
-      raw = (completion.choices[0]?.message?.content || "").trim();
-    } catch (err: any) {
-      console.warn(`[Query Extract] OpenRouter failed: ${err.message}`);
-    }
-  }
-
-  if (!raw) return fallback;
-
-  try {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return fallback;
-    const parsed = JSON.parse(jsonMatch[0]);
-    return {
-      keywords: Array.isArray(parsed.keywords)
-        ? parsed.keywords.filter((k: string) => k && k.length >= 2)
-        : fallback.keywords,
-      category: parsed.category || null,
-      colors: Array.isArray(parsed.colors) ? parsed.colors : [],
-      sizes: Array.isArray(parsed.sizes) ? parsed.sizes : [],
-      maxPrice: typeof parsed.maxPrice === "number" ? parsed.maxPrice : null,
-      minPrice: typeof parsed.minPrice === "number" ? parsed.minPrice : 0,
-      isProductQuery: parsed.isProductQuery !== false,
-    };
-  } catch {
-    return fallback;
-  }
 }
 
 // ─── Smart Product Search ─────────────────────────────────────────────────────
@@ -217,10 +200,9 @@ export async function smartSearchProducts(
  * For vision: keywords already extracted by Groq vision → smart DB search
  */
 export async function searchProducts(query: string, limit = 5) {
-  const params = await extractSearchParams(query);
+  const params = extractSearchParams(query);
 
   if (!params.isProductQuery) {
-    // Not a product query (greeting, general chat) — return empty
     return [];
   }
 

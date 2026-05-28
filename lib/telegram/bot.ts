@@ -6,7 +6,6 @@ import { Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
 // @ts-ignore
 import Groq from "groq-sdk";
-import { Ollama } from "ollama";
 import { HfInference } from "@huggingface/inference";
 import OpenAI from "openai";
 
@@ -34,69 +33,9 @@ import {
 const TELEGRAM_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const GROQ_KEY = (process.env.GROQ_API ?? process.env.GROQ_API_KEY ?? "").trim();
 const HF_KEY = (process.env.HF_API_KEY || process.env.HUGGING_FACE_API || "").trim();
-const OLLAMA_URL = (process.env.OLLAMA_URL || "https://ollama.com").replace(/\/+$/, "");
-const OLLAMA_KEY = (process.env.OLLAMA_API_KEY || "").trim();
 const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEY || "").trim();
 
-// Ollama Cloud is available when an API key is set.
-// Per Ollama docs: cloud API uses https://ollama.com/api (native) 
-// The OpenAI-compatible endpoint is https://ollama.com/v1 with Bearer auth
-const OLLAMA_AVAILABLE = OLLAMA_KEY.length > 0;
-// Use the native Ollama API format for cloud — NOT the /v1 OpenAI-compat path
-// which only works for local instances
-const OLLAMA_NATIVE_BASE = OLLAMA_URL; // https://ollama.com
-
 if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env");
-
-// ─── Ollama Dynamic Model Selection ─────────────────────────────────────────
-
-let ollamaModelName: string | null = null;
-let ollamaModelFetched = false;
-
-/**
- * Fetch available models from the Ollama instance and pick the best one.
- * Caches the result so we only fetch once per cold start.
- */
-async function getOllamaModel(): Promise<string> {
-  if (!OLLAMA_AVAILABLE) return "gemma3:4b";
-  if (ollamaModelFetched && ollamaModelName) return ollamaModelName;
-
-  try {
-    // Native Ollama API: GET /api/tags lists available models
-    const res = await fetch(`${OLLAMA_NATIVE_BASE}/api/tags`, {
-      headers: { Authorization: `Bearer ${OLLAMA_KEY}` },
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data = await res.json();
-    // Native format: { models: [{ name: "gemma3:4b", ... }] }
-    const models: string[] = (data.models || [])
-      .map((m: any) => (m.name || "").trim())
-      .filter((name: string) => name.length > 0);
-
-    if (models.length > 0) {
-      const preferred =
-        models.find((m) => m === "gemma3:4b") ||
-        models.find((m) => m === "ministral-3:3b") ||
-        models.find((m) => m === "gemma3:12b") ||
-        models.find((m) => m.includes("gemma3")) ||
-        models.find((m) => m.includes("ministral")) ||
-        models[0];
-      ollamaModelName = preferred ?? models[0];
-      console.log(`[Ollama Cloud] Selected model: ${ollamaModelName} (${models.length} available)`);
-    } else {
-      console.warn("[Ollama Cloud] No models found, using gemma3:4b");
-      ollamaModelName = "gemma3:4b";
-    }
-  } catch (error: any) {
-    console.warn(`[Ollama Cloud] Failed to fetch models: ${error.message}. Using gemma3:4b`);
-    ollamaModelName = "gemma3:4b";
-  }
-
-  ollamaModelFetched = true;
-  return ollamaModelName ?? "gemma3:4b";
-}
 
 // ─── Conversation Memory (in-memory, resets on cold start) ──────────────────
 
@@ -106,7 +45,7 @@ interface ChatMessage {
 }
 
 const conversations = new Map<string, ChatMessage[]>();
-const MAX_HISTORY = 16; // keep last 16 messages per user
+const MAX_HISTORY = 8; // keep last 8 messages — enough context, lower token cost
 
 function getHistory(telegramId: string): ChatMessage[] {
   return conversations.get(telegramId) ?? [];
@@ -190,6 +129,14 @@ async function withTyping<T>(
 }
 
 // ─── Ollama Chat (Primary) → OpenRouter Fallback ─────────────────────────────
+//
+// Ollama Cloud: primary chat — good quality, free.
+// OpenRouter: instant fallback if Ollama is slow/down.
+// Groq: reserved for vision ONLY (image analysis).
+
+const OLLAMA_URL = (process.env.OLLAMA_URL || "https://ollama.com").replace(/\/+$/, "");
+const OLLAMA_KEY = (process.env.OLLAMA_API_KEY || "").trim();
+const OLLAMA_AVAILABLE = OLLAMA_KEY.length > 0;
 
 async function chatWithAI(
   telegramId: string,
@@ -202,88 +149,70 @@ async function chatWithAI(
 
   pushHistory(telegramId, { role: "user", content: userMessage });
 
+  // Keep history lean — 8 messages max to reduce token payload
+  const history = getHistory(telegramId).slice(0, -1).slice(-8);
+
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: VEE_AI_SYSTEM_PROMPT },
-    ...getHistory(telegramId).slice(0, -1),
+    ...history,
     { role: "user", content: contextualMessage },
   ];
 
   let reply = "";
 
-  // ── Primary: Ollama Cloud (native API) ───────────────────────────────
-  // Per docs: https://ollama.com/api/generate with Bearer auth
-  // NOT /v1 — that's only for local instances
+  // ── Primary: Ollama Cloud ─────────────────────────────────────────────
   if (OLLAMA_AVAILABLE) {
     try {
-      const modelName = await getOllamaModel();
-      console.log(`[Ollama Cloud] Sending chat to model: ${modelName}`);
-
-      const res = await fetch(`${OLLAMA_NATIVE_BASE}/api/chat`, {
+      const res = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${OLLAMA_KEY}`,
         },
         body: JSON.stringify({
-          model: modelName,
+          model: "gemma3:4b",
           messages,
           stream: false,
         }),
+        // 15s timeout — if Ollama is cold, fall through to OpenRouter fast
+        signal: AbortSignal.timeout(15000),
       });
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`${res.status} ${errText}`);
-      }
-
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       reply = sanitizeAIResponse(data.message?.content);
-
       if (reply) {
-        console.log(`[Ollama Cloud] ✅ Got response (${reply.length} chars) from ${modelName}`);
+        console.log(`[Ollama] ✅ ${reply.length} chars`);
       } else {
-        console.warn(`[Ollama Cloud] ⚠️ Empty response from ${modelName}, falling back...`);
-        throw new Error("Ollama Cloud returned empty response");
+        throw new Error("Empty response from Ollama");
       }
-    } catch (ollamaError: any) {
-      console.warn(`⚠️ Ollama Cloud failed: ${ollamaError.message}. Falling back to OpenRouter...`);
+    } catch (ollamaErr: any) {
+      console.warn(`[Ollama] Failed: ${ollamaErr.message} — falling back to OpenRouter`);
     }
-  } else {
-    console.log("[Chat] No OLLAMA_API_KEY set — using OpenRouter directly");
   }
 
-  // ── Fallback (or primary when Ollama is off): OpenRouter ─────────────
-  if (!reply) {
+  // ── Fallback: OpenRouter ──────────────────────────────────────────────
+  if (!reply && OPENROUTER_KEY) {
     try {
-      if (!OPENROUTER_KEY) throw new Error("Missing OPENROUTER_API_KEY");
-
       const openRouter = new OpenAI({
         baseURL: "https://openrouter.ai/api/v1",
         apiKey: OPENROUTER_KEY,
-        defaultHeaders: {
-          "HTTP-Referer": "https://vendo.ng",
-          "X-Title": "Vendo Vee AI",
-        },
+        defaultHeaders: { "HTTP-Referer": "https://vendo.ng", "X-Title": "Vendo Vee AI" },
       });
-
       const completion = await openRouter.chat.completions.create({
-        model: "openrouter/free",
+        model: "openrouter/auto",
         messages,
+        max_tokens: 512,
       });
-
       reply = sanitizeAIResponse(completion.choices[0]?.message?.content);
-      if (reply) {
-        console.log(`[OpenRouter] ✅ Response (${reply.length} chars), model: ${completion.model}`);
-      } else {
-        console.warn("[OpenRouter] ⚠️ Empty response");
-      }
+      if (reply) console.log(`[OpenRouter] ✅ ${reply.length} chars`);
     } catch (orError: any) {
-      console.error("❌ OpenRouter failed:", orError.message);
+      console.error("[OpenRouter] Failed:", orError.message);
     }
   }
 
   if (!reply) {
-    reply = "Sorry, I couldn't process that right now. Both AI services are a bit busy — please try again in a moment! 🙏";
+    reply = "Sorry, I'm a bit busy right now — please try again in a moment! 🙏";
   }
 
   pushHistory(telegramId, { role: "assistant", content: reply });
@@ -459,7 +388,7 @@ Powered by Rocybits Technology 🚀`;
   //
   // Design: pick up to 5 verified (active + KYC approved) suppliers,
   // show 2 products each. Send ONE compact list message — no photo floods.
-  // Each product line has two inline buttons:
+  // Each product has two inline buttons:
   //   [🖼 View Image]  → URL button opening the image in browser
   //   [🛒 Order]       → callback to start checkout
   //
@@ -468,7 +397,7 @@ Powered by Rocybits Technology 🚀`;
       const { prisma } = await import("@/lib/prisma");
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://vendo.com.ng";
 
-      // Fetch up to 5 active, KYC-approved suppliers that have approved products
+      // Fetch up to 5 active, KYC-approved suppliers
       const suppliers = await prisma.supplier.findMany({
         where: { isActive: true, kycStatus: "APPROVED" },
         select: { id: true, businessName: true, supplierType: true },
@@ -481,13 +410,11 @@ Powered by Rocybits Technology 🚀`;
         return;
       }
 
-      // For each supplier grab their 2 newest approved, active, in-stock products
       type ShopProduct = {
         id: string;
         name: string;
         sellingPrice: any;
         imageUrls: string[];
-        sizes: any;
         supplierName: string;
         deliveryLabel: string;
       };
@@ -502,13 +429,7 @@ Powered by Rocybits Technology 🚀`;
             isActive: true,
             stock: { gt: 0 },
           },
-          select: {
-            id: true,
-            name: true,
-            sellingPrice: true,
-            imageUrls: true,
-            sizes: true,
-          },
+          select: { id: true, name: true, sellingPrice: true, imageUrls: true },
           orderBy: { createdAt: "desc" },
           take: 2,
         });
@@ -527,29 +448,29 @@ Powered by Rocybits Technology 🚀`;
         return;
       }
 
-      // Build a single compact list message
+      // Build compact list using plain Markdown (no escaping needed)
       const lines: string[] = [`🛍️ *What's in store* (${shopProducts.length} items)\n`];
 
       for (let i = 0; i < shopProducts.length; i++) {
         const p = shopProducts[i];
         const price = `₦${Number(p.sellingPrice).toLocaleString()}`;
-        lines.push(`${i + 1}\\. *${escapeMarkdownV2(p.name)}* — ${price}`);
-        lines.push(`   🏪 ${escapeMarkdownV2(p.supplierName)} · 🚚 ${p.deliveryLabel}`);
+        lines.push(`${i + 1}. *${p.name}* — ${price}`);
+        lines.push(`   🏪 ${p.supplierName} · 🚚 ${p.deliveryLabel}`);
       }
 
-      lines.push("\n_Tap View Image to preview, or Order to buy\\._");
+      lines.push("\n_Tap View Image to preview, or Order to buy._");
 
-      // Build inline keyboard — one row per product: [🖼 View] [🛒 Order]
+      // One row per product: [🖼 View] [🛒 Order]
       const keyboard = shopProducts.map((p) => {
         const imageUrl = p.imageUrls[0] ?? `${siteUrl}/vendo-logo.png`;
         return [
-          { text: `🖼 ${p.name.slice(0, 20)}`, url: imageUrl },
+          { text: `🖼 ${p.name.slice(0, 22)}`, url: imageUrl },
           { text: "🛒 Order", callback_data: `order:${p.id}` },
         ];
       });
 
       await ctx.reply(lines.join("\n"), {
-        parse_mode: "MarkdownV2",
+        parse_mode: "Markdown",
         reply_markup: { inline_keyboard: keyboard },
       });
     });
@@ -709,8 +630,8 @@ Powered by Rocybits Technology 🚀`;
       const searchKeywords = extractSearchKeywords(analysis);
       console.log(`[Photo Handler] Extracted search keywords: "${searchKeywords}"`);
 
-      // Step 3: Use Ollama/OpenRouter to intelligently parse the vision output into structured search params
-      const searchParams = await extractSearchParams(searchKeywords);
+      // Step 3: Extract structured search params from the vision keywords (instant, no AI call)
+      const searchParams = extractSearchParams(searchKeywords);
       console.log(`[Photo Handler] Smart search params:`, JSON.stringify(searchParams));
 
       // Step 4: Search for matching products using structured params
@@ -986,19 +907,18 @@ Powered by Rocybits Technology 🚀`;
     // ── Regular AI chat ────────────────────────────────────────────────
     try {
       await withTyping(ctx, "typing", async () => {
-        const user = await getOrCreateUser(telegramId, ctx.from.first_name, ctx.from.last_name);
-        const profile = formatUserProfileForAI(user);
-
-        // Fast heuristic: skip AI query extraction for obvious non-product messages
+        // Fast heuristic: skip product search for obvious non-product messages
         const lowerMsg = userMessage.toLowerCase();
         const isLikelyProductQuery = /\b(show|find|want|need|looking|buy|order|price|cheap|sneaker|shoe|shirt|dress|bag|trouser|jean|jacket|cap|watch|ring|necklace|ankara|agbada|kaftan|under|below|above|₦|naira)\b/.test(lowerMsg);
 
-        let products: any[] = [];
-        if (isLikelyProductQuery) {
-          products = await searchProducts(userMessage, 5);
-        }
+        // Run user lookup and product search in parallel
+        const [user, products] = await Promise.all([
+          getOrCreateUser(telegramId, ctx.from.first_name, ctx.from.last_name),
+          isLikelyProductQuery ? searchProducts(userMessage, 5) : Promise.resolve([]),
+        ]);
 
         const catalog = formatProductsForAI(products);
+        const profile = formatUserProfileForAI(user);
         const extraContext = `${catalog}\n\n${profile}`;
 
         const reply = await chatWithAI(telegramId, userMessage, extraContext);
