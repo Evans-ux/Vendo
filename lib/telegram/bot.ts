@@ -1,6 +1,11 @@
 // lib/telegram/bot.ts
 // Vee AI — Telegram bot
-// Architecture: Ollama (chat, dynamic model) → OpenRouter (chat fallback) | Groq (vision) | HuggingFace/Pollinations (image gen)
+//
+// KEY ARCHITECTURE:
+//   GROQ_KEY     → vision ONLY (analyzeImage). Photo handler is self-contained.
+//   GROQ_BACKUP  → chat primary + smart search query extraction (fast, sub-second)
+//   OpenRouter   → chat fallback when GROQ_BACKUP is rate-limited
+//   HuggingFace/Pollinations → image generation (/generate)
 
 import { Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
@@ -13,6 +18,7 @@ import {
   VEE_AI_SYSTEM_PROMPT,
   GROQ_VISION_PROMPT,
   IMAGE_GEN_ENHANCE_PROMPT,
+  GROQ_QUERY_EXTRACT_PROMPT,
 } from "./prompts";
 import {
   searchProducts,
@@ -25,1014 +31,615 @@ import {
   getUserOrders,
   createOrder,
   generatePaymentLink,
-  updateUserLocation
+  updateUserLocation,
 } from "./services";
 
-// ─── Environment Variables ───────────────────────────────────────────────────
+// ─── Keys ────────────────────────────────────────────────────────────────────
 
-const TELEGRAM_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
-const GROQ_KEY = (process.env.GROQ_API ?? process.env.GROQ_API_KEY ?? "").trim();
-const HF_KEY = (process.env.HF_API_KEY || process.env.HUGGING_FACE_API || "").trim();
-const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEY || "").trim();
+const TELEGRAM_TOKEN  = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
+const GROQ_VISION_KEY = (process.env.GROQ_API ?? process.env.GROQ_API_KEY ?? "").trim();
+const GROQ_CHAT_KEY   = (process.env.GROQ_BACKUP ?? "").trim();
+const HF_KEY          = (process.env.HF_API_KEY || process.env.HUGGING_FACE_API || "").trim();
+const OPENROUTER_KEY  = (process.env.OPENROUTER_API_KEY || "").trim();
 
-if (!TELEGRAM_TOKEN) console.error("⚠️  Missing TELEGRAM_BOT_TOKEN in .env");
+if (!TELEGRAM_TOKEN)  console.error("⚠️  Missing TELEGRAM_BOT_TOKEN");
+if (!GROQ_CHAT_KEY)   console.warn("⚠️  Missing GROQ_BACKUP — chat will use OpenRouter only");
+if (!GROQ_VISION_KEY) console.warn("⚠️  Missing GROQ_API — vision will be unavailable");
 
-// ─── Conversation Memory (in-memory, resets on cold start) ──────────────────
+// ─── Conversation Memory ─────────────────────────────────────────────────────
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
+interface ChatMessage { role: "user" | "assistant"; content: string }
 const conversations = new Map<string, ChatMessage[]>();
-const MAX_HISTORY = 8; // keep last 8 messages — enough context, lower token cost
+const MAX_HISTORY = 8;
 
-function getHistory(telegramId: string): ChatMessage[] {
-  return conversations.get(telegramId) ?? [];
+function getHistory(id: string): ChatMessage[] { return conversations.get(id) ?? []; }
+function pushHistory(id: string, msg: ChatMessage) {
+  const h = getHistory(id);
+  h.push(msg);
+  if (h.length > MAX_HISTORY) h.splice(0, h.length - MAX_HISTORY);
+  conversations.set(id, h);
 }
 
-function pushHistory(telegramId: string, msg: ChatMessage) {
-  const history = getHistory(telegramId);
-  history.push(msg);
-  // Trim to max length
-  if (history.length > MAX_HISTORY) {
-    history.splice(0, history.length - MAX_HISTORY);
-  }
-  conversations.set(telegramId, history);
-}
+// ─── Checkout State ───────────────────────────────────────────────────────────
 
-// ─── Checkout State Machine ───────────────────────────────────────────────────
-// Tracks multi-step checkout conversations per user
-
-interface CheckoutState {
-  productId: string;
-  step: "phone" | "address" | "confirm";
-  phone?: string;
-  address?: string;
-}
-
+interface CheckoutState { productId: string; step: "phone" | "address" | "confirm"; phone?: string; address?: string }
 const checkoutState = new Map<string, CheckoutState>();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Truncate text to fit Telegram's 4096-char message limit */
 function truncate(text: string, max = 4000): string {
-  if (text.length <= max) return text;
-  return text.substring(0, max) + "\n\n… (truncated)";
+  return text.length <= max ? text : text.substring(0, max) + "\n\n… (truncated)";
 }
 
-/**
- * Escape special characters for Telegram MarkdownV2.
- * Required for any user-supplied or DB text used in MarkdownV2 messages.
- */
-function escapeMarkdownV2(text: string): string {
-  return text.replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, "\\$&");
+function sanitizeAIResponse(reply: string | null | undefined): string {
+  return (reply || "")
+    .replace(/<\/?ASSISTANT>/gi, "")
+    .replace(/<\|assistant\|>/gi, "")
+    .replace(/\[ASSISTANT\]/gi, "")
+    .replace(/<\/?assistant>/gi, "")
+    .replace(/^\s*assistant\s*:/i, "")
+    .trim();
 }
 
-/** 
- * Sanitize AI output for Telegram's legacy Markdown mode.
- * Converts **bold** to *bold* and escapes underscores (often found in URLs/filenames).
- */
 function sanitizeMarkdown(text: string): string {
   return text
-    .replace(/\*\*/g, "*") // Convert standard Markdown **bold** to Telegram *bold*
-    .replace(/_/g, "\\_"); // Escape underscores to prevent unclosed italic entity errors
+    .replace(/<\/?ASSISTANT>/gi, "")
+    .replace(/<\|assistant\|>/gi, "")
+    .replace(/\*\*/g, "*")
+    .replace(/_/g, "\\_")
+    .trim();
 }
 
-/**
- * Sanitize AI response — ensure we never return an empty or whitespace-only string.
- */
-function sanitizeAIResponse(reply: string | null | undefined): string {
-  const cleaned = (reply || "").trim();
-  if (!cleaned || cleaned.length === 0) {
-    return "";
-  }
-  return cleaned;
-}
-
-/** Send a "typing…" indicator while running an async operation */
-async function withTyping<T>(
-  ctx: any,
-  action: string,
-  fn: () => Promise<T>
-): Promise<T> {
+async function withTyping<T>(ctx: any, action: string, fn: () => Promise<T>): Promise<T> {
   await ctx.sendChatAction(action as any).catch(() => {});
-  // Refresh typing every 4s for long operations
-  const interval = setInterval(() => {
-    ctx.sendChatAction(action as any).catch(() => {});
-  }, 4000);
-  try {
-    return await fn();
-  } finally {
-    clearInterval(interval);
-  }
+  const iv = setInterval(() => ctx.sendChatAction(action as any).catch(() => {}), 4000);
+  try { return await fn(); } finally { clearInterval(iv); }
 }
 
-// ─── Ollama Chat (Primary) → OpenRouter Fallback ─────────────────────────────
-//
-// Ollama Cloud: primary chat — good quality, free.
-// OpenRouter: instant fallback if Ollama is slow/down.
-// Groq: reserved for vision ONLY (image analysis).
+// ─── Chat AI: GROQ_BACKUP primary → OpenRouter fallback ──────────────────────
 
-const OLLAMA_URL = (process.env.OLLAMA_URL || "https://ollama.com").replace(/\/+$/, "");
-const OLLAMA_KEY = (process.env.OLLAMA_API_KEY || "").trim();
-const OLLAMA_AVAILABLE = OLLAMA_KEY.length > 0;
-
-async function chatWithAI(
-  telegramId: string,
-  userMessage: string,
-  extraContext: string = ""
-): Promise<string> {
-  const contextualMessage = extraContext
-    ? `${userMessage}\n\n${extraContext}`
-    : userMessage;
-
+async function chatWithAI(telegramId: string, userMessage: string, extraContext = ""): Promise<string> {
+  const contextualMessage = extraContext ? `${userMessage}\n\n${extraContext}` : userMessage;
   pushHistory(telegramId, { role: "user", content: userMessage });
-
-  // Keep history lean — 8 messages max to reduce token payload
-  const history = getHistory(telegramId).slice(0, -1).slice(-8);
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: VEE_AI_SYSTEM_PROMPT },
-    ...history,
+    ...getHistory(telegramId).slice(0, -1).slice(-8),
     { role: "user", content: contextualMessage },
   ];
 
   let reply = "";
 
-  // ── Primary: Ollama Cloud ─────────────────────────────────────────────
-  if (OLLAMA_AVAILABLE) {
+  // ── Primary: GROQ_BACKUP (fast, sub-second) ───────────────────────────
+  if (GROQ_CHAT_KEY) {
     try {
-      const res = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OLLAMA_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gemma3:4b",
-          messages,
-          stream: false,
-        }),
-        // 15s timeout — if Ollama is cold, fall through to OpenRouter fast
-        signal: AbortSignal.timeout(15000),
+      // @ts-ignore
+      const groq = new Groq({ apiKey: GROQ_CHAT_KEY });
+      const res = await groq.chat.completions.create({
+        model: "llama-3.1-8b-instant",
+        messages,
+        max_tokens: 512,
+        temperature: 0.7,
       });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      reply = sanitizeAIResponse(data.message?.content);
-      if (reply) {
-        console.log(`[Ollama] ✅ ${reply.length} chars`);
-      } else {
-        throw new Error("Empty response from Ollama");
-      }
-    } catch (ollamaErr: any) {
-      console.warn(`[Ollama] Failed: ${ollamaErr.message} — falling back to OpenRouter`);
+      reply = sanitizeAIResponse(res.choices[0]?.message?.content);
+      if (reply) console.log(`[Groq Chat] ✅ ${reply.length} chars`);
+      else throw new Error("Empty response");
+    } catch (e: any) {
+      console.warn(`[Groq Chat] Failed: ${e.message} — falling back to OpenRouter`);
     }
   }
 
   // ── Fallback: OpenRouter ──────────────────────────────────────────────
   if (!reply && OPENROUTER_KEY) {
     try {
-      const openRouter = new OpenAI({
+      const or = new OpenAI({
         baseURL: "https://openrouter.ai/api/v1",
         apiKey: OPENROUTER_KEY,
         defaultHeaders: { "HTTP-Referer": "https://vendo.ng", "X-Title": "Vendo Vee AI" },
       });
-      const completion = await openRouter.chat.completions.create({
-        model: "openrouter/free",
-        messages,
-        max_tokens: 512,
-      });
-      reply = sanitizeAIResponse(completion.choices[0]?.message?.content);
+      const res = await or.chat.completions.create({ model: "openrouter/auto", messages, max_tokens: 512 });
+      reply = sanitizeAIResponse(res.choices[0]?.message?.content);
       if (reply) console.log(`[OpenRouter] ✅ ${reply.length} chars`);
-    } catch (orError: any) {
-      console.error("[OpenRouter] Failed:", orError.message);
+    } catch (e: any) {
+      console.error("[OpenRouter] Failed:", e.message);
     }
   }
 
-  if (!reply) {
-    reply = "Sorry, I'm a bit busy right now — please try again in a moment! 🙏";
-  }
-
+  if (!reply) reply = "Sorry, I'm a bit busy right now — please try again in a moment! 🙏";
   pushHistory(telegramId, { role: "assistant", content: reply });
   return reply;
 }
 
-// ─── Groq Vision Analysis ────────────────────────────────────────────────────
+// ─── Smart Search: Groq extracts params → regex fallback ─────────────────────
+// Uses GROQ_BACKUP key (chat key) so vision key is never touched here.
+
+async function aiExtractSearchParams(userMessage: string): Promise<import("./services").SmartSearchParams | null> {
+  if (!GROQ_CHAT_KEY) return null;
+  try {
+    // @ts-ignore
+    const groq = new Groq({ apiKey: GROQ_CHAT_KEY });
+    const res = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages: [
+        { role: "system", content: GROQ_QUERY_EXTRACT_PROMPT },
+        { role: "user", content: userMessage },
+      ],
+      max_tokens: 200,
+      temperature: 0.1,
+    });
+    const raw = (res.choices[0]?.message?.content || "").trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      keywords: Array.isArray(parsed.keywords) ? parsed.keywords.filter((k: string) => k?.length >= 2) : [],
+      category: parsed.category || null,
+      colors: Array.isArray(parsed.colors) ? parsed.colors : [],
+      sizes: Array.isArray(parsed.sizes) ? parsed.sizes : [],
+      maxPrice: typeof parsed.maxPrice === "number" ? parsed.maxPrice : null,
+      minPrice: typeof parsed.minPrice === "number" ? parsed.minPrice : 0,
+      isProductQuery: parsed.isProductQuery !== false,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Vision: GROQ_KEY only — self-contained, no chat passthrough ──────────────
 
 async function analyzeImage(imageBuffer: Buffer): Promise<string> {
-  if (!GROQ_KEY) return "Vision analysis is currently unavailable (Missing Groq API Key).";
-
+  if (!GROQ_VISION_KEY) return "Vision analysis is currently unavailable.";
   try {
-    const base64Image = imageBuffer.toString("base64");
-
+    const base64 = imageBuffer.toString("base64");
     // @ts-ignore
-    const groq = new Groq({ apiKey: GROQ_KEY });
-
-    const response = await groq.chat.completions.create({
+    const groq = new Groq({ apiKey: GROQ_VISION_KEY });
+    const res = await groq.chat.completions.create({
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: GROQ_VISION_PROMPT },
-            {
-              type: "image_url",
-              image_url: { url: `data:image/jpeg;base64,${base64Image}` },
-            },
-          ],
-        },
-      ],
+      messages: [{
+        role: "user",
+        content: [
+          { type: "text", text: GROQ_VISION_PROMPT },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } },
+        ],
+      }],
       max_tokens: 512,
       temperature: 0.3,
     });
-
-    const content = sanitizeAIResponse(response.choices[0]?.message?.content);
-    console.log(`[Groq Vision] ✅ Analysis result (${content.length} chars): ${content.substring(0, 100)}...`);
-
-    if (!content) {
-      return "I could see the image but couldn't extract enough detail. Could you try a clearer photo?";
-    }
-    return content;
-  } catch (error: any) {
-    console.error("❌ Groq Vision Error:", error.message);
-
-    // Fallback: try OpenRouter for vision if Groq fails
-    if (OPENROUTER_KEY) {
-      try {
-        console.log("[Vision] Trying OpenRouter as vision fallback...");
-        const base64Image = imageBuffer.toString("base64");
-        const openRouter = new OpenAI({
-          baseURL: "https://openrouter.ai/api/v1",
-          apiKey: OPENROUTER_KEY,
-          defaultHeaders: {
-            "HTTP-Referer": "https://vendo.ng",
-            "X-Title": "Vendo Vee AI",
-          },
-        });
-
-        const response = await openRouter.chat.completions.create({
-          model: "openrouter/free",
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: GROQ_VISION_PROMPT },
-                {
-                  type: "image_url",
-                  image_url: { url: `data:image/jpeg;base64,${base64Image}` },
-                },
-              ],
-            },
-          ],
-        });
-
-        const fallbackContent = sanitizeAIResponse(response.choices[0]?.message?.content);
-        if (fallbackContent) {
-          console.log(`[OpenRouter Vision Fallback] ✅ Got analysis (${fallbackContent.length} chars)`);
-          return fallbackContent;
-        }
-      } catch (fallbackErr: any) {
-        console.error("❌ OpenRouter vision fallback also failed:", fallbackErr.message);
-      }
-    }
-
-    return "I'm having trouble analyzing images right now. Could you describe what you're looking for instead?";
+    const content = sanitizeAIResponse(res.choices[0]?.message?.content);
+    console.log(`[Groq Vision] ✅ ${content.length} chars`);
+    return content || "I could see the image but couldn't extract enough detail. Try a clearer photo?";
+  } catch (e: any) {
+    console.error("[Groq Vision] Failed:", e.message);
+    return "I'm having trouble analyzing images right now. Describe what you're looking for instead?";
   }
 }
 
-// ─── HuggingFace Image Generation ────────────────────────────────────────────
+// ─── Image Generation ─────────────────────────────────────────────────────────
 
 async function generateImage(prompt: string): Promise<Buffer> {
   try {
-    // Primary: Hugging Face
     const hf = new HfInference(HF_KEY);
-    const response = await hf.textToImage({
-      model: "tencent/HunyuanImage-3.0",
-      inputs: IMAGE_GEN_ENHANCE_PROMPT(prompt),
-    });
-    return Buffer.from(await (response as any).arrayBuffer());
-  } catch (error: any) {
-    console.warn("⚠️ Hugging Face image gen failed (likely quota), falling back to Pollinations:", error.message);
-    
-    // Fallback: Pollinations.ai (No credits/key required)
-    const enhancedPrompt = encodeURIComponent(IMAGE_GEN_ENHANCE_PROMPT(prompt));
-    const url = `https://image.pollinations.ai/prompt/${enhancedPrompt}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("Both HF and Pollinations failed to generate image");
-    return Buffer.from(await response.arrayBuffer());
+    const res = await hf.textToImage({ model: "tencent/HunyuanImage-3.0", inputs: IMAGE_GEN_ENHANCE_PROMPT(prompt) });
+    return Buffer.from(await (res as any).arrayBuffer());
+  } catch {
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(IMAGE_GEN_ENHANCE_PROMPT(prompt))}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Image generation failed");
+    return Buffer.from(await res.arrayBuffer());
   }
 }
 
-// ─── Bot Setup ───────────────────────────────────────────────────────────────
+// ─── Keyword Extraction (from vision analysis text) ──────────────────────────
 
-// Singleton — only create one bot instance across hot reloads
+function extractSearchKeywords(analysis: string): string {
+  const keywordLine = analysis.match(/(?:keywords?|search terms?|tags?)[:\s]+([^\n.]+)/i);
+  if (keywordLine) {
+    const kw = keywordLine[1].split(/[,;]+/).map(k => k.trim().toLowerCase()).filter(k => k.length > 1).slice(0, 6);
+    if (kw.length >= 2) return kw.join(" ");
+  }
+  const fashionTerms = ["sneakers","shoes","boot","sandal","shirt","dress","gown","jeans","trouser","bag","watch","cap","ankara","agbada","kaftan","black","white","red","blue","green","yellow","pink","purple","brown","grey","casual","formal","leather","suede","canvas","denim"];
+  const lower = analysis.toLowerCase();
+  const found = fashionTerms.filter(t => lower.includes(t)).slice(0, 6);
+  if (found.length > 0) return found.join(" ");
+  return analysis.split(/[.!?]/)[0]?.trim().replace(/\b(the|this|is|a|an|it|has|with|and|or|in|on|for|of|to|are)\b/gi, "").replace(/\s+/g, " ").trim() || analysis.substring(0, 50);
+}
+
+// ─── Bot Setup ────────────────────────────────────────────────────────────────
+
 const globalForBot = globalThis as unknown as { veeBot?: Telegraf };
 
 function createBot(): Telegraf {
   if (globalForBot.veeBot) return globalForBot.veeBot;
-
   const bot = new Telegraf(TELEGRAM_TOKEN);
 
-  // ── /start ─────────────────────────────────────────────────────────────
+  // ── /start ──────────────────────────────────────────────────────────────
   bot.start(async (ctx) => {
-    const user = await getOrCreateUser(
-      String(ctx.from.id),
-      ctx.from.first_name,
-      ctx.from.last_name
+    const user = await getOrCreateUser(String(ctx.from.id), ctx.from.first_name, ctx.from.last_name);
+    await ctx.reply(
+      `Hey ${user.name || "there"}! 👋🔥\n\nWelcome to *Vendo* — I'm *Vee AI*, your personal AI shopping assistant!\n\n` +
+      `🛍️ *Search products* — _"Show me black sneakers under ₦20,000"_\n` +
+      `📸 *Analyze photos* — Send me a picture of any outfit\n` +
+      `🎨 *Generate outfit previews* — Use /generate\n` +
+      `📏 *Size recommendations* — Set your sizes with /mysize\n\n` +
+      `Ready to shop? Just tell me what you need! 😊`,
+      { parse_mode: "Markdown" }
     );
-
-    const welcome = `Hey ${user.name || "there"}! 👋🔥
-
-Welcome to *Vendo* — I'm *Vee AI*, your personal AI shopping assistant!
-
-Here's what I can do for you:
-
-🛍️ *Search products* — Just tell me what you're looking for
-  _"Show me black sneakers under ₦20,000"_
-
-📸 *Analyze photos* — Send me a picture of any outfit and I'll find similar items in our store
-
-🎨 *Generate outfit previews* — Use /generate to see AI-created outfit ideas
-
-📏 *Size recommendations* — Set your sizes with /mysize and I'll always suggest the right fit
-
-Ready to shop? Just tell me what you need! 😊`;
-
-    await ctx.reply(welcome, { parse_mode: "Markdown" });
   });
 
-  // ── /help ──────────────────────────────────────────────────────────────
+  // ── /help ────────────────────────────────────────────────────────────────
   bot.help(async (ctx) => {
-    const helpText = `🤖 *Vee AI — Your Commands*
-
-/start — Start fresh with Vee AI
-/help — Show this help message
-/shop — Browse our latest products
-/mysize — Set or view your shoe & shirt sizes
-/generate \\[description\\] — Generate an AI outfit image
-/orders — View your recent orders
-
-💡 *Tips:*
-• Just type what you want — _"I need a red dress"_
-• Send me a photo and I'll find matching products
-• Ask me for style advice — _"What goes with white sneakers?"_
-
-Powered by Rocybits Technology 🚀`;
-
-    await ctx.reply(helpText, { parse_mode: "Markdown" });
+    await ctx.reply(
+      `🤖 *Vee AI — Commands*\n\n` +
+      `/start — Start fresh\n/help — This message\n/shop — Browse products\n` +
+      `/mysize — Set shoe & shirt sizes\n/generate [description] — AI outfit image\n/orders — Your recent orders\n\n` +
+      `💡 Just type what you want — _"I need a red dress"_\n\nPowered by Rocybits Technology 🚀`,
+      { parse_mode: "Markdown" }
+    );
   });
 
-  // ── /shop — Browse latest products ─────────────────────────────────────
-  //
-  // Design: pick up to 5 verified (active + KYC approved) suppliers,
-  // show 2 products each. Send ONE compact list message — no photo floods.
-  // Each product has two inline buttons:
-  //   [🖼 View Image]  → URL button opening the image in browser
-  //   [🛒 Order]       → callback to start checkout
-  //
+  // ── /shop — Paginated product browser ───────────────────────────────────
+  const PAGE_SIZE = 10;
+
+  async function buildShopPage(offset: number) {
+    const { prisma } = await import("@/lib/prisma");
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://vendo.com.ng";
+    const all = await prisma.product.findMany({
+      where: { isApproved: true, isActive: true, stock: { gt: 0 }, supplier: { isActive: true, kycStatus: "APPROVED" } },
+      select: { id: true, name: true, sellingPrice: true, imageUrls: true, supplier: { select: { businessName: true, supplierType: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return { page: all.slice(offset, offset + PAGE_SIZE), hasMore: offset + PAGE_SIZE < all.length, total: all.length, siteUrl, offset };
+  }
+
+  function renderShopMessage(page: any[], offset: number, total: number, hasMore: boolean, siteUrl: string) {
+    const lines = [`🛍️ *Vendo Store* — showing ${offset + 1}–${offset + page.length} of ${total} items\n`];
+    for (let i = 0; i < page.length; i++) {
+      const p = page[i];
+      lines.push(`${offset + i + 1}. *${p.name}* — ₦${Number(p.sellingPrice).toLocaleString()}`);
+      lines.push(`   🏪 ${p.supplier.businessName} · 🚚 ${p.supplier.supplierType === "LOCAL" ? "2-3 days" : "14-21 days"}`);
+    }
+    lines.push("\n_Tap View Image to preview, or Order to buy._");
+    const keyboard: any[][] = page.map(p => [
+      { text: `🖼 ${p.name.slice(0, 22)}`, url: p.imageUrls[0] ?? `${siteUrl}/vendo-logo.png` },
+      { text: "🛒 Order", callback_data: `order:${p.id}` },
+    ]);
+    if (hasMore) keyboard.push([{ text: `➕ Load More (${total - offset - PAGE_SIZE} remaining)`, callback_data: `shop_page:${offset + PAGE_SIZE}` }]);
+    else if (offset > 0) keyboard.push([{ text: "✅ You've seen everything!", callback_data: "shop_end" }]);
+    return { text: lines.join("\n"), keyboard };
+  }
+
   bot.command("shop", async (ctx) => {
     await withTyping(ctx, "typing", async () => {
-      const { prisma } = await import("@/lib/prisma");
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://vendo.com.ng";
-
-      // Fetch up to 5 active, KYC-approved suppliers
-      const suppliers = await prisma.supplier.findMany({
-        where: { isActive: true, kycStatus: "APPROVED" },
-        select: { id: true, businessName: true, supplierType: true },
-        take: 5,
-        orderBy: { updatedAt: "desc" },
-      });
-
-      if (suppliers.length === 0) {
-        await ctx.reply("🛍️ No verified stores available right now. Check back soon!");
-        return;
-      }
-
-      type ShopProduct = {
-        id: string;
-        name: string;
-        sellingPrice: any;
-        imageUrls: string[];
-        supplierName: string;
-        deliveryLabel: string;
-      };
-
-      const shopProducts: ShopProduct[] = [];
-
-      for (const supplier of suppliers) {
-        const products = await prisma.product.findMany({
-          where: {
-            supplierId: supplier.id,
-            isApproved: true,
-            isActive: true,
-            stock: { gt: 0 },
-          },
-          select: { id: true, name: true, sellingPrice: true, imageUrls: true },
-          orderBy: { createdAt: "desc" },
-          take: 2,
-        });
-
-        for (const p of products) {
-          shopProducts.push({
-            ...p,
-            supplierName: supplier.businessName,
-            deliveryLabel: supplier.supplierType === "LOCAL" ? "2-3 days" : "14-21 days",
-          });
-        }
-      }
-
-      if (shopProducts.length === 0) {
-        await ctx.reply("🛍️ No products available right now. Check back soon!");
-        return;
-      }
-
-      // Build compact list using plain Markdown (no escaping needed)
-      const lines: string[] = [`🛍️ *What's in store* (${shopProducts.length} items)\n`];
-
-      for (let i = 0; i < shopProducts.length; i++) {
-        const p = shopProducts[i];
-        const price = `₦${Number(p.sellingPrice).toLocaleString()}`;
-        lines.push(`${i + 1}. *${p.name}* — ${price}`);
-        lines.push(`   🏪 ${p.supplierName} · 🚚 ${p.deliveryLabel}`);
-      }
-
-      lines.push("\n_Tap View Image to preview, or Order to buy._");
-
-      // One row per product: [🖼 View] [🛒 Order]
-      const keyboard = shopProducts.map((p) => {
-        const imageUrl = p.imageUrls[0] ?? `${siteUrl}/vendo-logo.png`;
-        return [
-          { text: `🖼 ${p.name.slice(0, 22)}`, url: imageUrl },
-          { text: "🛒 Order", callback_data: `order:${p.id}` },
-        ];
-      });
-
-      await ctx.reply(lines.join("\n"), {
-        parse_mode: "Markdown",
-        reply_markup: { inline_keyboard: keyboard },
-      });
+      const { page, hasMore, total, siteUrl, offset } = await buildShopPage(0);
+      if (page.length === 0) { await ctx.reply("🛍️ No products available right now. Check back soon!"); return; }
+      const { text, keyboard } = renderShopMessage(page, offset, total, hasMore, siteUrl);
+      await ctx.reply(text, { parse_mode: "Markdown", reply_markup: { inline_keyboard: keyboard } });
     });
   });
 
-  // ── /mysize — Set or view sizes ────────────────────────────────────────
+  // ── /mysize ──────────────────────────────────────────────────────────────
   bot.command("mysize", async (ctx) => {
-    const user = await getOrCreateUser(
-      String(ctx.from.id),
-      ctx.from.first_name
-    );
-
+    const user = await getOrCreateUser(String(ctx.from.id), ctx.from.first_name);
     const args = ctx.message.text.replace(/^\/mysize\s*/, "").trim();
-
     if (!args) {
-      // Show current sizes
-      const shoe = user.shoeSize || "Not set";
-      const shirt = user.shirtSize || "Not set";
-      await ctx.reply(
-        `📏 *Your Size Profile*\n\n👟 Shoe size: *${shoe}*\n👕 Shirt size: *${shirt}*\n\nTo update, send:\n\`/mysize shoe 43 shirt L\`\nor\n\`/mysize shoe 42\`\nor\n\`/mysize shirt XL\``,
-        { parse_mode: "Markdown" }
-      );
+      await ctx.reply(`📏 *Your Size Profile*\n\n👟 Shoe: *${user.shoeSize || "Not set"}*\n👕 Shirt: *${user.shirtSize || "Not set"}*\n\nUpdate: \`/mysize shoe 43 shirt L\``, { parse_mode: "Markdown" });
       return;
     }
-
-    // Parse size updates
     const shoeMatch = args.match(/shoe\s+(\S+)/i);
     const shirtMatch = args.match(/shirt\s+(\S+)/i);
-
-    if (!shoeMatch && !shirtMatch) {
-      await ctx.reply(
-        "❓ I didn't catch that. Try:\n`/mysize shoe 43 shirt L`",
-        { parse_mode: "Markdown" }
-      );
-      return;
-    }
-
-    await updateUserSizes(
-      String(ctx.from.id),
-      shoeMatch?.[1],
-      shirtMatch?.[1]
-    );
-
-    const parts: string[] = [];
+    if (!shoeMatch && !shirtMatch) { await ctx.reply("❓ Try: `/mysize shoe 43 shirt L`", { parse_mode: "Markdown" }); return; }
+    await updateUserSizes(String(ctx.from.id), shoeMatch?.[1], shirtMatch?.[1]);
+    const parts = [];
     if (shoeMatch) parts.push(`👟 Shoe: *${shoeMatch[1]}*`);
     if (shirtMatch) parts.push(`👕 Shirt: *${shirtMatch[1]}*`);
-
-    await ctx.reply(`✅ Sizes updated!\n${parts.join("\n")}`, {
-      parse_mode: "Markdown",
-    });
+    await ctx.reply(`✅ Sizes updated!\n${parts.join("\n")}`, { parse_mode: "Markdown" });
   });
 
-  // ── /generate — AI outfit image generation ─────────────────────────────
+  // ── /generate ────────────────────────────────────────────────────────────
   bot.command("generate", async (ctx) => {
     const prompt = ctx.message.text.replace(/^\/generate\s*/, "").trim();
-
-    if (!prompt) {
-      await ctx.reply(
-        "🎨 Tell me what to generate!\n\nExample:\n`/generate red ankara dress with gold accessories`",
-        { parse_mode: "Markdown" }
-      );
-      return;
-    }
-
-    await ctx.reply("🎨 Generating your outfit preview... this may take a moment ⏳");
-
+    if (!prompt) { await ctx.reply("🎨 Example:\n`/generate red ankara dress with gold accessories`", { parse_mode: "Markdown" }); return; }
+    await ctx.reply("🎨 Generating your outfit preview... ⏳");
     try {
-      const imageBuffer = await withTyping(ctx, "upload_photo", () =>
-        generateImage(prompt)
-      );
-
-      await ctx.replyWithPhoto(
-        { source: imageBuffer },
-        { caption: `✨ AI-generated outfit: "${prompt}"\n\nPowered by Vee AI 🛍️` }
-      );
-    } catch (error) {
-      console.error("Image generation error:", error);
-      await ctx.reply(
-        "😅 Sorry, I couldn't generate that image right now. The AI image service might be busy — try again in a minute!"
-      );
+      const buf = await withTyping(ctx, "upload_photo", () => generateImage(prompt));
+      await ctx.replyWithPhoto({ source: buf }, { caption: `✨ AI-generated outfit: "${prompt}"\n\nPowered by Vee AI 🛍️` });
+    } catch {
+      await ctx.reply("😅 Image generation is busy right now — try again in a minute!");
     }
   });
 
-  // ── /orders — View recent orders ───────────────────────────────────────
+  // ── /orders ──────────────────────────────────────────────────────────────
   bot.command("orders", async (ctx) => {
     await withTyping(ctx, "typing", async () => {
       const orders = await getUserOrders(String(ctx.from.id));
+      if (orders.length === 0) { await ctx.reply("📦 No orders yet! Type /shop to browse 🛍️"); return; }
+      const formatted = orders.map((o: any, i: number) => {
+        const items = (o.items as any[]).map((item: any) => `  • ${item.product.name} (x${item.quantity})`).join("\n");
+        return `${i + 1}. *Order* — ₦${Number(o.totalAmount).toLocaleString()}\n   ${o.status} | ${o.paymentStatus}\n${items}`;
+      }).join("\n\n");
+      await ctx.reply(`📦 *Your Recent Orders*\n\n${formatted}`, { parse_mode: "Markdown" });
+    });
+  });
 
-      if (orders.length === 0) {
+  // ── Voice / video note ───────────────────────────────────────────────────
+  bot.on(message("voice"), async (ctx) => {
+    await ctx.reply("🎙️ Voice messages aren't supported yet — please type your message instead! 😊\n\n💡 You can also send a photo and I'll find similar products.", { parse_mode: "Markdown" });
+  });
+  bot.on(message("video_note"), async (ctx) => {
+    await ctx.reply("🎥 Video notes aren't supported yet — please type or send a photo instead! 😊");
+  });
+
+  // ── Photo handler — Vision is SELF-CONTAINED, no second AI pass ──────────
+  // GROQ_KEY analyzes the image and replies directly with product matches.
+  // No chatWithAI call — keeps vision key isolated and response instant.
+  bot.on(message("photo"), async (ctx) => {
+    await ctx.reply("📸 Analyzing your image... 🔍");
+    try {
+      const imageBuffer = await withTyping(ctx, "typing", async () => {
+        const photos = ctx.message.photo;
+        const file = await ctx.telegram.getFile(photos[photos.length - 1].file_id);
+        const res = await fetch(`https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${file.file_path}`);
+        return Buffer.from(await res.arrayBuffer());
+      });
+
+      // Step 1: Vision analysis (GROQ_KEY only)
+      const analysis = await withTyping(ctx, "typing", () => analyzeImage(imageBuffer));
+      console.log(`[Photo] Vision: "${analysis.substring(0, 80)}"`);
+
+      // Step 2: Extract keywords from vision output
+      const keywords = extractSearchKeywords(analysis);
+
+      // Step 3: Smart search — try Groq AI extraction first, regex fallback
+      let searchParams = await aiExtractSearchParams(keywords);
+      if (!searchParams) searchParams = extractSearchParams(keywords);
+
+      // Step 4: Search DB
+      const products = await searchProductsByParams(searchParams, 5);
+      console.log(`[Photo] Found ${products.length} products`);
+
+      // Step 5: Reply directly — no second AI call
+      if (products.length === 0) {
         await ctx.reply(
-          "📦 You don't have any orders yet!\n\nStart shopping by telling me what you're looking for, or type /shop to browse 🛍️"
+          `📸 I analyzed your image!\n\n*What I see:* ${analysis.split(".")[0]}.\n\n` +
+          `I couldn't find an exact match in our store right now, but try describing it in text and I'll search again! 🔍`,
+          { parse_mode: "Markdown" }
         );
         return;
       }
 
-      const formatted = orders
-        .map((o:any, i:number) => {
-          const items = (o.items as any[])
-            .map((item: any) => `  • ${item.product.name} (x${item.quantity})`)
-            .join("\n");
-          const status = o.status.charAt(0) + o.status.slice(1).toLowerCase();
-          return `${i + 1}. *Order* — ₦${Number(o.totalAmount).toLocaleString()}\n   Status: ${status} | ${o.paymentStatus}\n${items}`;
-        })
-        .join("\n\n");
-
-      await ctx.reply(`📦 *Your Recent Orders*\n\n${formatted}`, {
-        parse_mode: "Markdown",
-      });
-    });
-  });
-
-  // ── Voice note handler — Polite "not supported" ────────────────────────
-  bot.on(message("voice"), async (ctx) => {
-    await ctx.reply(
-      "🎙️ Thanks for the voice note! Unfortunately, voice messages aren't supported just yet.\n\n" +
-      "Please type your message instead and I'll be happy to help you find exactly what you need! 😊\n\n" +
-      "💡 *Tip:* You can also send me photos of items you like and I'll find similar products in our store!",
-      { parse_mode: "Markdown" }
-    );
-  });
-
-  // Also handle video notes (circular video messages in Telegram)
-  bot.on(message("video_note"), async (ctx) => {
-    await ctx.reply(
-      "🎥 Thanks for the video message! Unfortunately, video notes aren't supported just yet.\n\n" +
-      "Please type your message or send a photo instead and I'll be happy to help! 😊",
-      { parse_mode: "Markdown" }
-    );
-  });
-
-  // ── Photo handler — Groq vision + product matching ─────────────────────
-  bot.on(message("photo"), async (ctx) => {
-    await ctx.reply("📸 Nice! Let me analyze this image... 🔍");
-
-    try {
-      const imageBuffer = await withTyping(ctx, "typing", async () => {
-        // Get highest resolution photo
-        const photos = ctx.message.photo;
-        const fileId = photos[photos.length - 1].file_id;
-
-        // Download the image from Telegram
-        const file = await ctx.telegram.getFile(fileId);
-        const fileUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${file.file_path}`;
-        const response = await fetch(fileUrl);
-        return Buffer.from(await response.arrayBuffer());
-      });
-
-      // Step 1: Analyze with Groq Vision
-      const analysis = await withTyping(ctx, "typing", () =>
-        analyzeImage(imageBuffer)
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://vendo.com.ng";
+      await ctx.reply(
+        `📸 Found *${products.length} similar item${products.length > 1 ? "s" : ""}* in our store!\n\n` +
+        `_Based on: ${analysis.split(".")[0].trim()}_`,
+        { parse_mode: "Markdown" }
       );
 
-      console.log(`[Photo Handler] Vision analysis: "${analysis}"`);
-
-      // Step 2: Extract search keywords from the analysis
-      // The vision model returns a paragraph — extract meaningful search terms
-      const searchKeywords = extractSearchKeywords(analysis);
-      console.log(`[Photo Handler] Extracted search keywords: "${searchKeywords}"`);
-
-      // Step 3: Extract structured search params from the vision keywords (instant, no AI call)
-      const searchParams = extractSearchParams(searchKeywords);
-      console.log(`[Photo Handler] Smart search params:`, JSON.stringify(searchParams));
-
-      // Step 4: Search for matching products using structured params
-      const products = await searchProductsByParams(searchParams, 5);
-      console.log(`[Photo Handler] Found ${products.length} matching products`);
-
-      const catalog = formatProductsForAI(products);
-
-      // Step 4: Get user profile
-      const user = await getOrCreateUser(
-        String(ctx.from.id),
-        ctx.from.first_name
-      );
-      const profile = formatUserProfileForAI(user);
-
-      // Step 5: Build context and send to AI for a natural response
-      const extraContext = `[IMAGE ANALYSIS by Groq Vision]\n${analysis}\n\n${catalog}\n\n${profile}`;
-
-      const reply = await chatWithAI(
-        String(ctx.from.id),
-        "I just sent you a photo of a fashion item. Based on your analysis, what is it and do you have anything similar in the store?",
-        extraContext
-      );
-
-      await ctx.reply(truncate(sanitizeMarkdown(reply)), { parse_mode: "Markdown" });
-
-      // Send matching product images with Order buttons
+      // Send up to 3 matching products with Order buttons
       for (const product of products.slice(0, 3)) {
+        const sizes = typeof product.sizes === "object" && product.sizes !== null
+          ? (product.sizes as any).available?.join(", ") || "Various"
+          : "Various";
+        const delivery = product.supplier.supplierType === "LOCAL" ? "2-3 days" : "14-21 days";
+        const caption = `*${product.name}*\n₦${Number(product.sellingPrice).toLocaleString()}\n📏 ${sizes} · 🚚 ${delivery}`;
+
         if (product.imageUrls[0]) {
           try {
             await ctx.replyWithPhoto(product.imageUrls[0], {
-              caption: `*${product.name}*\n₦${Number(product.sellingPrice).toLocaleString()}`,
+              caption,
               parse_mode: "Markdown",
-              reply_markup: {
-                inline_keyboard: [[
-                  { text: "🛒 Order This", callback_data: `order:${product.id}` }
-                ]]
-              }
+              reply_markup: { inline_keyboard: [[{ text: "🛒 Order This", callback_data: `order:${product.id}` }]] },
             });
-          } catch {
-            // Skip invalid image URLs
-          }
+            continue;
+          } catch { /* fall through to text */ }
         }
+        await ctx.reply(caption, {
+          parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: [[{ text: "🛒 Order This", callback_data: `order:${product.id}` }]] },
+        });
       }
-
-      // If no products were found, let the user know explicitly
-      if (products.length === 0) {
-        await ctx.reply(
-          "🔍 I analyzed the image but couldn't find exact matches in our current catalog. " +
-          "Try describing what you're looking for in text and I'll search again!",
-        );
-      }
-    } catch (error) {
-      console.error("Photo analysis error:", error);
-      await ctx.reply(
-        "😅 I had trouble analyzing that image. Could you try sending it again, or describe what you're looking for instead?"
-      );
+    } catch (err) {
+      console.error("Photo handler error:", err);
+      await ctx.reply("😅 Had trouble with that image — try sending it again or describe what you're looking for!");
     }
   });
 
-  // ── Location handler — Save delivery coordinates ───────────────────────
+  // ── Location ─────────────────────────────────────────────────────────────
   bot.on(message("location"), async (ctx) => {
     const { latitude, longitude } = ctx.message.location;
     await withTyping(ctx, "typing", async () => {
       try {
         await updateUserLocation(String(ctx.from.id), latitude, longitude);
-        await ctx.reply(
-          "📍 *Location Saved!*\n\nI've updated your profile with your delivery coordinates. This helps me find suppliers closer to you! 🚚",
-          { parse_mode: "Markdown" }
-        );
-      } catch (error) {
-        console.error("Location save error:", error);
-        await ctx.reply("😅 I couldn't save your location profile. Please try again later.");
+        await ctx.reply("📍 *Location Saved!*\n\nI've updated your delivery coordinates. This helps find suppliers closer to you! 🚚", { parse_mode: "Markdown" });
+      } catch {
+        await ctx.reply("😅 Couldn't save your location. Please try again later.");
       }
     });
   });
 
-  // ── Inline button handler — "🛒 Order This" + "✅ I Received My Order" ──
+  // ── Callback query handler ────────────────────────────────────────────────
   bot.on("callback_query", async (ctx) => {
     const data = (ctx.callbackQuery as any).data as string;
     if (!data) return;
 
-    // ── Order button ──────────────────────────────────────────────────
+    // Shop pagination
+    if (data.startsWith("shop_page:")) {
+      const offset = parseInt(data.replace("shop_page:", ""), 10) || 0;
+      await ctx.answerCbQuery("Loading more... 🛍️");
+      try {
+        const { page, hasMore, total, siteUrl } = await buildShopPage(offset);
+        if (page.length === 0) { await ctx.answerCbQuery("No more products!"); return; }
+        const { text, keyboard } = renderShopMessage(page, offset, total, hasMore, siteUrl);
+        try {
+          await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: { inline_keyboard: keyboard } });
+        } catch {
+          await ctx.reply(text, { parse_mode: "Markdown", reply_markup: { inline_keyboard: keyboard } });
+        }
+      } catch (e: any) {
+        console.error("Shop pagination error:", e);
+        await ctx.answerCbQuery("Something went wrong. Try /shop again.");
+      }
+      return;
+    }
+
+    if (data === "shop_end") { await ctx.answerCbQuery("You've seen all our products! 🎉"); return; }
+
+    // Order button
     if (data.startsWith("order:")) {
       const productId = data.replace("order:", "");
       const telegramId = String(ctx.from.id);
-
       await ctx.answerCbQuery("Starting your order... 🛍️");
-
       const { prisma } = await import("@/lib/prisma");
       const product = await prisma.product.findUnique({
         where: { id: productId },
         include: { supplier: { select: { businessName: true, supplierType: true } } },
       });
-
       if (!product || !product.isApproved || !product.isActive || product.stock < 1) {
         await ctx.reply("❌ Sorry, that product is no longer available.");
         return;
       }
-
-      const delivery = product.supplier.supplierType === "LOCAL" ? "2-3 business days" : "14-21 business days";
       checkoutState.set(telegramId, { productId, step: "phone" });
-
       await ctx.reply(
-        `🛍️ *${product.name}*\n` +
-        `💰 ₦${Number(product.sellingPrice).toLocaleString()}\n` +
-        `🏪 ${product.supplier.businessName}\n` +
-        `🚚 Delivery: ${delivery}\n\n` +
-        `📱 *What's your phone number?*\n_(e.g. 08012345678)_`,
+        `🛍️ *${product.name}*\n💰 ₦${Number(product.sellingPrice).toLocaleString()}\n🏪 ${product.supplier.businessName}\n🚚 ${product.supplier.supplierType === "LOCAL" ? "2-3 business days" : "14-21 business days"}\n\n📱 *What's your phone number?*\n_(e.g. 08012345678)_`,
         { parse_mode: "Markdown" }
       );
       return;
     }
 
-    // ── "I Received My Order" button ──────────────────────────────────
+    // Delivery confirmed
     if (data.startsWith("received:")) {
       const orderId = data.replace("received:", "");
-      const telegramId = String(ctx.from.id);
-
-      await ctx.answerCbQuery("Processing your confirmation... ✅");
-
+      await ctx.answerCbQuery("Processing... ✅");
       try {
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://vendo.com.ng";
-        const secret = process.env.INTERNAL_API_SECRET ?? "";
-
-        const res = await fetch(`${siteUrl}/api/supplier/wallet/confirm-delivery`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? "https://vendo.com.ng"}/api/supplier/wallet/confirm-delivery`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-internal-secret": secret,
-          },
+          headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET ?? "" },
           body: JSON.stringify({ orderId }),
         });
-
         const result = await res.json();
-
-        if (!res.ok) {
-          await ctx.reply(`❌ ${result.message || "Could not confirm delivery. Please try again."}`);
-          return;
-        }
-
-        // Edit the original message to remove the button
-        try {
-          await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-        } catch { /* message may be too old to edit */ }
-
+        if (!res.ok) { await ctx.reply(`❌ ${result.message || "Could not confirm delivery."}`); return; }
+        try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch { /* too old */ }
         await ctx.reply(
-          `✅ *Delivery Confirmed!*\n\n` +
-          `Thank you for confirming receipt of your order! 🙏\n\n` +
-          `The supplier's payment has been released and is now pending a 24-hour review period before they can withdraw.\n\n` +
-          `We hope you love your purchase! Type /orders to view your order history.`,
+          `✅ *Delivery Confirmed!*\n\nThank you! 🙏 The supplier's payment is now in the 24-hour review period.\n\nType /orders to view your order history.`,
           { parse_mode: "Markdown" }
         );
-      } catch (err: any) {
-        console.error("Delivery confirmation error:", err);
+      } catch (e: any) {
+        console.error("Delivery confirm error:", e);
         await ctx.reply("❌ Something went wrong. Please try again or contact support.");
       }
       return;
     }
   });
 
-  // ── Text message handler — Main AI chat with product search ────────────
+  // ── Text message handler ──────────────────────────────────────────────────
   bot.on(message("text"), async (ctx) => {
     const userMessage = ctx.message.text;
     const telegramId = String(ctx.from.id);
 
-    // ── Checkout state machine ─────────────────────────────────────────
-    // Pending checkout: { productId, step: 'phone'|'address'|'confirm' }
+    // Checkout state machine
     const pending = checkoutState.get(telegramId);
-
     if (pending) {
       if (pending.step === "phone") {
-        // Validate Nigerian phone number
         const phone = userMessage.trim().replace(/\s/g, "");
         if (!/^(\+234|0)[789][01]\d{8}$/.test(phone)) {
-          await ctx.reply(
-            "❌ That doesn't look like a valid Nigerian phone number.\n\nPlease enter your phone number (e.g. 08012345678 or +2348012345678):"
-          );
+          await ctx.reply("❌ Invalid Nigerian phone number. Try: 08012345678 or +2348012345678");
           return;
         }
         checkoutState.set(telegramId, { ...pending, phone, step: "address" });
-        await ctx.reply(
-          "📍 *Delivery Address*\n\nPlease type your full delivery address:\n\n_Example: 12 Awka Road, Onitsha, Anambra_",
-          { parse_mode: "Markdown" }
-        );
+        await ctx.reply("📍 *Delivery Address*\n\nPlease type your full delivery address:\n_Example: 12 Awka Road, Onitsha, Anambra_", { parse_mode: "Markdown" });
         return;
       }
-
       if (pending.step === "address") {
         const address = userMessage.trim();
-        if (address.length < 10) {
-          await ctx.reply("Please enter a more complete address (street, city, state):");
-          return;
-        }
+        if (address.length < 10) { await ctx.reply("Please enter a more complete address (street, city, state):"); return; }
         checkoutState.set(telegramId, { ...pending, address, step: "confirm" });
-
-        // Show order summary for confirmation
         const { prisma } = await import("@/lib/prisma");
-        const product = await prisma.product.findUnique({
-          where: { id: pending.productId },
-          include: { supplier: { select: { businessName: true } } },
-        });
-
-        if (!product) {
-          checkoutState.delete(telegramId);
-          await ctx.reply("❌ Sorry, that product is no longer available.");
-          return;
-        }
-
+        const product = await prisma.product.findUnique({ where: { id: pending.productId }, include: { supplier: { select: { businessName: true } } } });
+        if (!product) { checkoutState.delete(telegramId); await ctx.reply("❌ Product no longer available."); return; }
         await ctx.reply(
-          `📋 *Order Summary*\n\n` +
-          `🛍️ *${product.name}*\n` +
-          `💰 ₦${Number(product.sellingPrice).toLocaleString()}\n` +
-          `🏪 ${product.supplier.businessName}\n` +
-          `📱 Phone: ${pending.phone}\n` +
-          `📍 Deliver to: ${address}\n\n` +
-          `Reply *YES* to confirm and get your payment link, or *NO* to cancel.`,
+          `📋 *Order Summary*\n\n🛍️ *${product.name}*\n💰 ₦${Number(product.sellingPrice).toLocaleString()}\n🏪 ${product.supplier.businessName}\n📱 ${pending.phone}\n📍 ${address}\n\nReply *YES* to confirm or *NO* to cancel.`,
           { parse_mode: "Markdown" }
         );
         return;
       }
-
       if (pending.step === "confirm") {
         const answer = userMessage.trim().toUpperCase();
-
         if (answer === "NO" || answer === "CANCEL") {
           checkoutState.delete(telegramId);
-          await ctx.reply("❌ Order cancelled. No worries — just tell me what you're looking for! 😊");
+          await ctx.reply("❌ Order cancelled. Just tell me what you're looking for! 😊");
           return;
         }
-
-        if (answer === "YES" || answer === "CONFIRM" || answer === "Y") {
+        if (answer === "YES" || answer === "Y" || answer === "CONFIRM") {
           checkoutState.delete(telegramId);
-          await ctx.reply("⏳ Creating your order and generating payment link...");
-
+          await ctx.reply("⏳ Creating your order...");
           try {
-            const order = await createOrder(
-              telegramId,
-              pending.productId,
-              pending.phone,
-              pending.address
-            );
-
-            // Generate Flutterwave payment link
+            const order = await createOrder(telegramId, pending.productId, pending.phone, pending.address);
             const paymentLink = await generatePaymentLink(order.id);
-
             const productName = (order as any).items[0]?.product?.name ?? "Item";
             await ctx.reply(
-              `✅ *Order Created!*\n\n` +
-              `Order: *#${(order as any).orderNumber}*\n` +
-              `Item: *${productName}*\n` +
-              `Total: *₦${Number(order.totalAmount).toLocaleString()}*\n\n` +
-              `💳 *Tap below to pay securely:*\n${paymentLink}\n\n` +
-              `⏰ Payment link expires in 30 minutes.\n` +
-              `Type /orders to track your order after payment.`,
+              `✅ *Order Created!*\n\nOrder: *#${(order as any).orderNumber}*\nItem: *${productName}*\nTotal: *₦${Number(order.totalAmount).toLocaleString()}*\n\n💳 *Tap below to pay securely:*\n${paymentLink}\n\n⏰ Link expires in 30 minutes.`,
               { parse_mode: "Markdown" }
             );
-          } catch (err: any) {
-            console.error("Order/payment error:", err);
-            await ctx.reply(
-              `❌ Sorry, something went wrong: ${err.message}\n\nPlease try again or contact support.`
-            );
+          } catch (e: any) {
+            await ctx.reply(`❌ Something went wrong: ${e.message}\n\nPlease try again or contact support.`);
           }
           return;
         }
-
-        // Unrecognised response
         await ctx.reply("Please reply *YES* to confirm or *NO* to cancel.", { parse_mode: "Markdown" });
         return;
       }
     }
 
-    // ── Regular AI chat ────────────────────────────────────────────────
+    // Regular AI chat with smart product search
     try {
       await withTyping(ctx, "typing", async () => {
-        // Fast heuristic: skip product search for obvious non-product messages
         const lowerMsg = userMessage.toLowerCase();
         const isLikelyProductQuery = /\b(show|find|want|need|looking|buy|order|price|cheap|sneaker|shoe|shirt|dress|bag|trouser|jean|jacket|cap|watch|ring|necklace|ankara|agbada|kaftan|under|below|above|₦|naira)\b/.test(lowerMsg);
 
-        // Run user lookup and product search in parallel
+        // Run user lookup and smart product search in parallel
         const [user, products] = await Promise.all([
           getOrCreateUser(telegramId, ctx.from.first_name, ctx.from.last_name),
-          isLikelyProductQuery ? searchProducts(userMessage, 5) : Promise.resolve([]),
+          isLikelyProductQuery
+            ? (async () => {
+                const aiParams = await aiExtractSearchParams(userMessage);
+                const params = aiParams ?? extractSearchParams(userMessage);
+                if (!params.isProductQuery) return [];
+                return searchProductsByParams(params, 5);
+              })()
+            : Promise.resolve([]),
         ]);
 
-        const catalog = formatProductsForAI(products);
+        const catalog = formatProductsForAI(products as any);
         const profile = formatUserProfileForAI(user);
-        const extraContext = `${catalog}\n\n${profile}`;
-
-        const reply = await chatWithAI(telegramId, userMessage, extraContext);
+        const reply = await chatWithAI(telegramId, userMessage, `${catalog}\n\n${profile}`);
         console.log(`[Bot] Reply for ${telegramId}: ${reply.substring(0, 80)}...`);
 
         await ctx.reply(truncate(sanitizeMarkdown(reply)), { parse_mode: "Markdown" });
 
-        // Send first product image if products found
-        if (products.length > 0 && products[0].imageUrls[0] && isLikelyProductQuery) {
+        // Only send product photo if AI actually mentioned the product
+        if (
+          (products as any[]).length > 0 &&
+          (products as any[])[0].imageUrls[0] &&
+          isLikelyProductQuery &&
+          reply.toLowerCase().includes((products as any[])[0].name.toLowerCase().slice(0, 8))
+        ) {
           try {
-            await ctx.replyWithPhoto(products[0].imageUrls[0], {
-              caption: `*${products[0].name}*\n₦${Number(products[0].sellingPrice).toLocaleString()}`,
+            const p = (products as any[])[0];
+            await ctx.replyWithPhoto(p.imageUrls[0], {
+              caption: `*${p.name}*\n₦${Number(p.sellingPrice).toLocaleString()}`,
               parse_mode: "Markdown",
-              reply_markup: {
-                inline_keyboard: [[
-                  { text: "🛒 Order This", callback_data: `order:${products[0].id}` }
-                ]]
-              }
+              reply_markup: { inline_keyboard: [[{ text: "🛒 Order This", callback_data: `order:${p.id}` }]] },
             });
           } catch { /* skip invalid URLs */ }
         }
       });
-    } catch (error) {
-      console.error("Chat error:", error);
-      try {
-        await ctx.reply("😅 Oops, something went wrong. Try again in a moment!");
-      } catch { /* ignore */ }
+    } catch (err) {
+      console.error("Chat error:", err);
+      try { await ctx.reply("😅 Oops, something went wrong. Try again in a moment!"); } catch { /* ignore */ }
     }
   });
 
-  // Store singleton
-  if (process.env.NODE_ENV !== "production") {
-    globalForBot.veeBot = bot;
-  }
-
+  if (process.env.NODE_ENV !== "production") globalForBot.veeBot = bot;
   return bot;
-}
-
-// ─── Keyword Extraction Helper ───────────────────────────────────────────────
-
-/**
- * Extract meaningful search keywords from a Groq vision analysis.
- *
- * Three-strategy approach:
- * 1. Parse the explicit "Keywords:" line Groq was asked to provide
- * 2. Scan the paragraph for known fashion terms
- * 3. Fall back to the first sentence cleaned of stop words
- */
-function extractSearchKeywords(analysis: string): string {
-  // ── Strategy 1: Parse the structured keywords Groq was asked to provide ──
-  // GROQ_VISION_PROMPT asks for "3-5 search keywords" — Groq often ends with:
-  // "Keywords: sneakers, black, leather, casual" or "Search keywords: ..."
-  const keywordLineMatch = analysis.match(
-    /(?:keywords?|search terms?|tags?)[:\s]+([^\n.]+)/i
-  );
-  if (keywordLineMatch) {
-    const keywords = keywordLineMatch[1]
-      .split(/[,;]+/)
-      .map((k) => k.trim().toLowerCase())
-      .filter((k) => k.length > 1 && k.length < 30)
-      .slice(0, 6);
-    if (keywords.length >= 2) {
-      console.log(`[Keywords] Parsed from Groq structured output: ${keywords.join(", ")}`);
-      return keywords.join(" ");
-    }
-  }
-
-  // ── Strategy 2: Scan for known fashion terms ──────────────────────────────
-  const fashionTerms = [
-    "sneakers", "sneaker", "shoes", "shoe", "boot", "boots", "sandal", "sandals",
-    "heels", "heel", "loafers", "slides", "flip-flops", "slippers",
-    "shirt", "t-shirt", "tshirt", "polo", "blouse", "top", "tank",
-    "dress", "gown", "skirt", "jumpsuit",
-    "jeans", "trousers", "pants", "shorts", "joggers", "chinos",
-    "jacket", "hoodie", "sweater", "cardigan", "blazer", "coat",
-    "bag", "handbag", "backpack", "clutch", "purse", "tote",
-    "watch", "watches", "bracelet", "necklace", "earring", "ring", "jewelry",
-    "cap", "hat", "beanie", "scarf",
-    "belt", "sunglasses", "glasses",
-    "ankara", "agbada", "dashiki", "kaftan",
-    // Colors
-    "black", "white", "red", "blue", "green", "yellow", "pink", "purple",
-    "brown", "grey", "gray", "navy", "beige", "gold", "silver", "orange",
-    "cream", "burgundy", "maroon", "teal", "coral",
-    // Styles
-    "casual", "formal", "streetwear", "sporty", "vintage", "classic",
-    "traditional", "modern", "elegant", "athletic",
-    // Materials
-    "leather", "suede", "canvas", "denim", "silk", "cotton", "lace",
-  ];
-
-  const analysisLower = analysis.toLowerCase();
-  const foundTerms: string[] = [];
-
-  for (const term of fashionTerms) {
-    if (analysisLower.includes(term) && !foundTerms.includes(term)) {
-      foundTerms.push(term);
-    }
-  }
-
-  if (foundTerms.length > 0) {
-    const searchString = foundTerms.slice(0, 6).join(" ");
-    console.log(`[Keywords] Extracted ${foundTerms.length} fashion terms: ${searchString}`);
-    return searchString;
-  }
-
-  // ── Strategy 3: First sentence, stop-words removed ────────────────────────
-  const firstSentence = analysis.split(/[.!?]/)[0]?.trim() || analysis;
-  const cleaned = firstSentence
-    .replace(/\b(the|this|is|a|an|it|has|with|and|or|in|on|for|of|to|are|was|were|been|being|have|that|from|which|very|also|its|these|those|can|will|may|just|more|most|some|any|all|each|both|few|other|such|than|too|only|same|into|over|after|about|out|up|down|one|two|three|four|five|image|shows|appears|features|looks|seems|photo|picture)\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return cleaned || analysis.substring(0, 50);
 }
 
 export const bot = createBot();

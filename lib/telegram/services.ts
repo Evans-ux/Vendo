@@ -1,7 +1,7 @@
 // lib/telegram/services.ts
-// Database queries for the Vee AI Telegram bot
-// Query intelligence uses Ollama (primary) → OpenRouter (fallback) — same as chat
-// Groq is ONLY used for vision (image analysis)
+// Database queries and smart search for the Vee AI Telegram bot.
+// Query extraction: Groq backup key (in bot.ts) → regex fallback (here)
+// Vision: Groq vision key (in bot.ts, isolated)
 
 import prisma from "@/lib/prisma";
 
