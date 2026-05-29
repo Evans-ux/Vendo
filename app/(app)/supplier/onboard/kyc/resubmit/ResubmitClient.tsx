@@ -98,6 +98,7 @@ export default function ResubmitClient({ businessName, reason }: { businessName:
 
     try {
       const res = await fetch("/api/supplier/onboard/kyc/resubmit", {
+       
         method: "POST",
         body: formData,
       });
