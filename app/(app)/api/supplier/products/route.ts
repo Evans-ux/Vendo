@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+    const body = await request.json();
     const { name, description, category, basePrice, stock, sizes, imageUrls, deliveryMethod } = body;
 
     if (!name || !basePrice || !stock || !imageUrls || imageUrls.length === 0 || !deliveryMethod) {
