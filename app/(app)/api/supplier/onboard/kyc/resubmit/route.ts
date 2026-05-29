@@ -7,20 +7,16 @@ export async function POST(req: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // 1. Verify supplier existence and current status
+    // 1. Verify supplier existence
     const supplier = await prisma.supplier.findUnique({
       where: { userId: user.id },
     });
 
-    if (!supplier) {
-      return NextResponse.json({ error: "Supplier record not found" }, { status: 404 });
-    }
+    if (!supplier) return NextResponse.json({ error: "Supplier record not found" }, { status: 404 });
 
-    // 2. Safety Check: Only allow resubmission if currently REJECTED
+    // 2. The "Secure Door": Only allow resubmission if currently REJECTED
     if (supplier.kycStatus !== "REJECTED") {
       return NextResponse.json({ error: "Application is not in a rejected state" }, { status: 400 });
     }
@@ -40,13 +36,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required documents or bank details" }, { status: 400 });
     }
 
-    // 4. File Validation
-    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
-    if (!allowedTypes.includes(kycFile.type) || !allowedTypes.includes(businessFile.type)) {
-      return NextResponse.json({ error: "Invalid file type. Only JPG, PNG, and PDF are allowed." }, { status: 400 });
-    }
-
-    // 5. Secure File Uploads
+    // 4. Secure File Uploads to Private Bucket
     const uploadToPrivateBucket = async (file: File, folder: string) => {
       const fileExt = file.name.split('.').pop();
       const fileName = `${supplier.id}/resubmit_${folder}_${Date.now()}.${fileExt}`;
@@ -72,12 +62,12 @@ export async function POST(req: Request) {
       uploadToPrivateBucket(businessFile, "business")
     ]);
 
-    // 6. Update Database
+    // 5. Update Database: Reset status to PENDING and clear rejection reason
     await prisma.supplier.update({
       where: { id: supplier.id },
       data: {
         kycStatus: "PENDING",
-        kycRejectionReason: null, // Clear the rejection reason
+        kycRejectionReason: null, 
         kycSubmittedAt: new Date(),
         kycDocType,
         kycDocUrl: kycPath,
@@ -90,13 +80,9 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      message: "Documents resubmitted for review" 
-    });
-
+    return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error("KYC_RESUBMIT_API_ERROR:", error);
+    console.error("KYC_RESUBMIT_ERROR:", error);
     return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });
   }
 }

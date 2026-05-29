@@ -97,8 +97,7 @@ export default function ResubmitClient({ businessName, reason }: { businessName:
     formData.append("accountHolderName", verifiedName);
 
     try {
-      const res = await fetch("/api/supplier/onboard/kyc/resubmit", {
-       
+      const res = await fetch("/supplier/onboard/kyc/resubmit", {
         method: "POST",
         body: formData,
       });
