@@ -1,43 +1,79 @@
 import { redirect } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/server";
+
 import prisma from "@/lib/prisma";
+
 import ResubmitClient from "./ResubmitClient";
 
 export default async function KycResubmitPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  try {
+    const supabase = await createClient();
 
-  if (!user) redirect("/auth/login");
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    include: { supplier: true },
-  });
+    // Not logged in
+    if (authError || !user) {
+      redirect("/auth/login");
+    }
 
-  // Admins should not access supplier resubmission
-  if (dbUser?.role === "ADMIN") {
-    redirect("/admin/dashboard");
-  }
+    // Fetch user with supplier relation
+    const dbUser = await prisma.user.findUnique({
+      where: {
+        id: user.id,
+      },
 
-  const supplier = dbUser?.supplier;
-  const kycStatus = supplier?.kycStatus;
+      include: {
+        supplier: true,
+      },
+    });
 
-  if (!supplier) redirect("/supplier/onboard");
+    // User missing in DB
+    if (!dbUser) {
+      redirect("/auth/login");
+    }
 
-  // Safety check: Only allow if status is REJECTED.
-  // If it's PENDING or APPROVED, they should be on the dashboard.
-  if (kycStatus !== "REJECTED") {
+    // Prevent admins from entering supplier route
+    if (dbUser.role === "ADMIN") {
+      redirect("/admin/dashboard");
+    }
+
+    const supplier = dbUser.supplier;
+
+    // No supplier profile yet
+    if (!supplier) {
+      redirect("/supplier/onboard");
+    }
+
+    // Only rejected suppliers can access this page
+    if (supplier.kycStatus !== "REJECTED") {
+      redirect("/supplier/dashboard");
+    }
+
+    return (
+      <div className="min-h-screen bg-background py-10 px-4">
+        <div className="max-w-2xl mx-auto">
+          <ResubmitClient
+            businessName={
+              supplier.businessName
+            }
+            reason={
+              supplier.kycRejectionReason ||
+              "Please verify your documents."
+            }
+          />
+        </div>
+      </div>
+    );
+  } catch (error) {
+    console.error(
+      "KYC_RESUBMIT_PAGE_ERROR:",
+      error
+    );
+
     redirect("/supplier/dashboard");
   }
-
-  return (
-    <div className="min-h-screen bg-background py-10 px-4">
-      <div className="max-w-2xl mx-auto">
-        <ResubmitClient
-          businessName={supplier.businessName}
-          reason={supplier.kycRejectionReason || "Please verify your documents."}
-        />
-      </div>
-    </div>
-  );
 }
