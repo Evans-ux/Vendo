@@ -70,15 +70,31 @@ export async function POST(req: Request) {
         kycRejectionReason: null, 
         kycSubmittedAt: new Date(),
         kycDocType,
-        kycDocUrl: kycPath,
+        kycDocUrl: `kyc-documents/${kycPath}`,
         businessDocType,
-        businessDocUrl: businessPath,
+        businessDocUrl: `kyc-documents/${businessPath}`,
         bankName,
         bankCode,
         accountNumber,
         accountHolderName,
       },
     });
+
+    // 6. Storage Cleanup: Remove old documents from storage to save space
+    const filesToDelete = [];
+    if (supplier.kycDocUrl) {
+      filesToDelete.push(supplier.kycDocUrl.replace('kyc-documents/', ''));
+    }
+    if (supplier.businessDocUrl) {
+      filesToDelete.push(supplier.businessDocUrl.replace('kyc-documents/', ''));
+    }
+
+    if (filesToDelete.length > 0) {
+      // Perform cleanup in the background to avoid delaying the response
+      supabase.storage.from('kyc-documents').remove(filesToDelete).then(({ error }) => {
+        if (error) console.error("Failed to delete old KYC files from storage:", error);
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
