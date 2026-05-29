@@ -206,7 +206,7 @@ export default function DashboardClient({
   const handleResubmit = () => {
     sessionStorage.setItem(sessionKey, "1");
     setShowRejectionModal(false);
-    router.push("/supplier/onboard/kyc");
+    router.push("/supplier/kyc/resubmit");
   };
 
   const handleLogout = async () => {
@@ -307,7 +307,7 @@ export default function DashboardClient({
                 {supplier.kycRejectionReason}
               </p>
               <button
-                onClick={() => router.push("/supplier/onboard/kyc")}
+                onClick={() => router.push("/supplier/kyc/resubmit")}
                 className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-red-600 dark:text-red-400 hover:underline underline-offset-2"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
