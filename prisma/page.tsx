@@ -25,8 +25,8 @@ export default function AdminSettingsPage() {
             <div className="grid gap-2">
               <Label htmlFor="commission">Default Markup (%)</Label>
               <div className="flex items-center gap-4">
-                <Input id="commission" type="number" defaultValue="25" className="w-32 bg-background border-input" />
-                <span className="text-sm text-muted-foreground">Applied to base prices.</span>
+                <Input id="commission" type="number" defaultValue="10" className="w-32 bg-background border-input" />
+                <span className="text-sm text-muted-foreground">Applied to base prices (10% = supplier earns base price, Vendo keeps markup).</span>
               </div>
             </div>
             <Button className="bg-brand-orange hover:bg-brand-orange/90">Save Changes</Button>

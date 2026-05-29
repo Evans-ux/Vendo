@@ -345,12 +345,15 @@ export default function AddProductClient() {
               <div className="flex flex-col sm:flex-row justify-between items-center gap-6">
                 <div className="w-full sm:w-auto p-4 rounded-xl bg-muted/50 border border-muted">
                   <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">
-                    Your Earnings Per Sale
+                    Your Payout Per Sale
                   </p>
                   <p className="text-2xl font-black text-primary">
                     ₦
                     {(parseFloat(formData.basePrice) -
                       (formData.deliveryMethod === "PLATFORM_LOGISTICS" ? logisticsFee : 0) || 0).toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    = your cost price{formData.deliveryMethod === "PLATFORM_LOGISTICS" ? " − logistics fee" : ""}
                   </p>
                 </div>
                 <Button

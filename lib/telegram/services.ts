@@ -180,9 +180,11 @@ export async function smartSearchProducts(
   }
 
   // ── Pass 3: include unapproved (so bot can acknowledge item exists) ──────
+  // Still filter by active supplier — suspended suppliers are never shown
   const pass3 = await prisma.product.findMany({
     where: {
       isActive: true,
+      supplier: { isActive: true },
       ...termFilter,
     },
     take: limit,

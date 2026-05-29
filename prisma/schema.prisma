@@ -104,7 +104,7 @@ model User {
 
   // Relations
   supplier Supplier? // one user can have at most one supplier profile
-  orders   Order[] // all orders placed by this user as a customer
+  orders   Order[]   // all orders placed by this user as a customer
 }
 
 // ─────────────────────────────────────────────
@@ -194,8 +194,8 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
-  user     User      @relation(fields: [userId], references: [id])
+  // Relations — cascade: deleting a User deletes their Supplier profile and all related data
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   products Product[]
   earnings EarningsTransaction[]
   withdrawals WithdrawalRequest[]
@@ -215,7 +215,8 @@ model Product {
   category    String? // "Footwear" | "Tops" | "Bottoms" | "Accessories" etc.
 
   // Pricing — supplier sets basePrice, sellingPrice is auto-calculated
-  // sellingPrice = ROUND(basePrice * 1.25) — enforced in the API route, stored here
+  // sellingPrice = ROUND(basePrice * 1.10) — 10% markup, enforced in the API route, stored here
+  // Supplier earns basePrice per sale; Vendo keeps the 10% markup as commission
   basePrice    Decimal @db.Decimal(10, 2)
   sellingPrice Decimal @db.Decimal(10, 2)
 
@@ -253,8 +254,8 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
-  supplier   Supplier    @relation(fields: [supplierId], references: [id])
+  // Relations — cascade: deleting a Supplier deletes all their products
+  supplier   Supplier    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
 }
 
@@ -299,8 +300,8 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
-  user  User        @relation(fields: [userId], references: [id])
+  // Relations — cascade: deleting a User deletes their orders; deleting an Order deletes its items
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   items OrderItem[]
 }
 
@@ -313,8 +314,8 @@ model OrderItem {
   size      String? // the size the customer selected
   unitPrice Decimal @db.Decimal(10, 2) // sellingPrice snapshot at time of order
 
-  // Relations
-  order   Order   @relation(fields: [orderId], references: [id])
+  // Relations — cascade: deleting an Order deletes its items
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
 }
 
@@ -354,8 +355,8 @@ model EarningsTransaction {
 
   createdAt DateTime @default(now())
 
-  // Relations
-  supplier Supplier @relation(fields: [supplierId], references: [id])
+  // Relations — cascade: deleting a Supplier deletes all their earnings records
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 }
 
 // ─────────────────────────────────────────────
@@ -392,6 +393,6 @@ model WithdrawalRequest {
   createdAt   DateTime  @default(now())
   completedAt DateTime?
 
-  // Relations
-  supplier Supplier @relation(fields: [supplierId], references: [id])
+  // Relations — cascade: deleting a Supplier deletes all their withdrawal records
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 }

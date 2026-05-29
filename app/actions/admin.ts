@@ -406,30 +406,60 @@ export async function deleteUserAccount(userId: string) {
     const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
     if (dbUser?.role !== "ADMIN") throw new Error("Forbidden: Admins only");
 
-    // 1. Check if user is a supplier
-    const supplier = await prisma.supplier.findUnique({ where: { userId } });
-    if (supplier) {
-      await prisma.product.deleteMany({ where: { supplierId: supplier.id } });
-      await prisma.earningsTransaction.deleteMany({ where: { supplierId: supplier.id } });
-      await prisma.withdrawalRequest.deleteMany({ where: { supplierId: supplier.id } });
-      await prisma.supplier.delete({ where: { id: supplier.id } });
-    }
+    // Use a transaction to delete all Prisma data in the correct dependency order
+    await prisma.$transaction(async (tx) => {
+      const supplier = await tx.supplier.findUnique({ where: { userId } });
 
-    // 2. Delete Orders and OrderItems associated with user
-    const userOrders = await prisma.order.findMany({ where: { userId } });
-    const orderIds = userOrders.map(o => o.id);
-    await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
-    await prisma.order.deleteMany({ where: { userId } });
+      if (supplier) {
+        // Delete supplier-related data first (leaf nodes → parent)
+        await tx.earningsTransaction.deleteMany({ where: { supplierId: supplier.id } });
+        await tx.withdrawalRequest.deleteMany({ where: { supplierId: supplier.id } });
 
-    // 3. Delete the user
-    await prisma.user.delete({
-      where: { id: userId }
+        // Delete order items for products belonging to this supplier, then the products
+        const supplierProducts = await tx.product.findMany({
+          where: { supplierId: supplier.id },
+          select: { id: true },
+        });
+        const productIds = supplierProducts.map(p => p.id);
+        if (productIds.length > 0) {
+          await tx.orderItem.deleteMany({ where: { productId: { in: productIds } } });
+        }
+        await tx.product.deleteMany({ where: { supplierId: supplier.id } });
+        await tx.supplier.delete({ where: { id: supplier.id } });
+      }
+
+      // Delete orders placed by this user (order items first)
+      const userOrders = await tx.order.findMany({ where: { userId }, select: { id: true } });
+      const orderIds = userOrders.map(o => o.id);
+      if (orderIds.length > 0) {
+        await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
+      }
+      await tx.order.deleteMany({ where: { userId } });
+
+      // Finally delete the user row
+      await tx.user.delete({ where: { id: userId } });
     });
+
+    // Delete from Supabase Auth — this is the source of truth for login.
+    // Must use the service-role client (admin API), not the anon client.
+    // We create a separate admin client using the service role key.
+    const { createClient: createAdminClient } = await import('@supabase/supabase-js');
+    const adminClient = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+    const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(userId);
+    if (authDeleteError) {
+      // Log but don't fail — Prisma data is already cleaned up.
+      // The user can no longer log in since their DB row is gone.
+      console.warn('[deleteUserAccount] Supabase Auth delete failed:', authDeleteError.message);
+    }
 
     revalidatePath("/admin/customers");
     return { success: true };
   } catch (error: any) {
-    console.error(error);
+    console.error('[deleteUserAccount]', error);
     return { success: false, error: error.message || "Failed to delete user" };
   }
 }

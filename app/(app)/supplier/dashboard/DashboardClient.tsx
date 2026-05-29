@@ -272,6 +272,29 @@ export default function DashboardClient({
           </span>
         </div>
 
+        {/* ── Account suspended banner ── */}
+        {!supplier.isActive && supplier.kycStatus === "APPROVED" && (
+          <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-5 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-xl">🚫</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-base font-bold text-red-600 dark:text-red-400 mb-1">
+                Account Suspended
+              </p>
+              <p className="text-sm text-red-600/80 dark:text-red-300/80 leading-relaxed">
+                Your supplier account has been suspended by the Vendo admin team. Your products are hidden from customers and you cannot upload new products or process withdrawals.
+              </p>
+              <p className="text-sm text-red-600/80 dark:text-red-300/80 mt-2">
+                To appeal or get more information, contact{" "}
+                <a href="mailto:support@vendo.ng" className="font-semibold underline underline-offset-2">
+                  support@vendo.ng
+                </a>
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── KYC rejection inline banner ── */}
         {supplier.kycStatus === "REJECTED" && supplier.kycRejectionReason && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 flex items-start gap-3">

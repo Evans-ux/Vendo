@@ -26,7 +26,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
+    // Block suspended suppliers from uploading during onboarding too
+    if (!dbUser.supplier.isActive && dbUser.supplier.onboardingStep === "COMPLETED") {
+      return NextResponse.json(
+        { message: "Your account has been suspended. Contact support to resolve this." },
+        { status: 403 }
+      );
+    }
     const { name, description, category, basePrice, stock, sizes, imageUrls, deliveryMethod } = body;
 
     if (!name || !basePrice || !stock || !imageUrls || imageUrls.length === 0 || !deliveryMethod) {

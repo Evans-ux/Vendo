@@ -54,19 +54,19 @@ function ConfirmModal({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10">
+      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10">
         {/* Icon */}
         <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 ${
-          isApprove ? "bg-green-100" : "bg-red-100"
+          isApprove ? "bg-green-500/10" : "bg-red-500/10"
         }`}>
           <span className="text-2xl">{isApprove ? "✓" : "✗"}</span>
         </div>
 
-        <h3 className="text-lg font-bold text-gray-900 text-center mb-2">
+        <h3 className="text-lg font-bold text-foreground text-center mb-2">
           {isApprove ? "Approve this supplier?" : "Reject this supplier?"}
         </h3>
 
-        <p className="text-sm text-gray-500 text-center mb-6">
+        <p className="text-sm text-muted-foreground text-center mb-6">
           {isApprove
             ? "This will verify their identity, activate their account, and approve all their uploaded products."
             : `Their account will remain inactive. They'll see your reason and can re-submit.`}
@@ -76,7 +76,7 @@ function ConfirmModal({
           <button
             onClick={onCancel}
             disabled={processing}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>

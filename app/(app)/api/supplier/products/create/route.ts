@@ -35,6 +35,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Block suspended suppliers
+    if (!dbUser.supplier.isActive) {
+      return NextResponse.json(
+        { message: "Your account has been suspended. Contact support to resolve this." },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { name, description, category, basePrice, stock, sizes, imageUrls, deliveryMethod } = body;
 

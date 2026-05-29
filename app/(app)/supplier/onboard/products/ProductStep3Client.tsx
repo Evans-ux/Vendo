@@ -190,8 +190,9 @@ export default function ProductStep3Client() {
   };
 
   const basePriceNum = parseFloat(basePrice) || 0;
-  const sellingPrice = basePriceNum * 1.10;
-  const payout = sellingPrice - (deliveryMethod === "PLATFORM_LOGISTICS" ? logisticsFee : 0);
+  const sellingPrice = basePriceNum * 1.10;  // 10% markup — Vendo's commission
+  // Supplier earns basePrice per order (Vendo keeps the 10% markup as commission)
+  const payout = basePriceNum - (deliveryMethod === "PLATFORM_LOGISTICS" ? logisticsFee : 0);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -298,10 +299,10 @@ export default function ProductStep3Client() {
                         <p className="text-xs text-yellow-600 dark:text-yellow-400">⚠️ Using estimated rate — live pricing unavailable</p>
                       )}
                       {basePriceNum > 0 && (
-                        <div className="pt-2 border-t border-border mt-2 flex justify-between text-sm">
-                          <span className="text-muted-foreground">Your payout per order:</span>
-                          <span className="font-semibold text-foreground">₦{payout.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                        </div>
+                        <><div className="pt-2 border-t border-border mt-2 flex justify-between text-sm">
+                            <span className="text-muted-foreground">Your payout per order:</span>
+                            <span className="font-semibold text-foreground">₦{payout.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          </div><p className="text-xs text-muted-foreground/70">= your cost price minus logistics fee</p></>
                       )}
                     </div>
                   ) : (

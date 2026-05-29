@@ -33,7 +33,7 @@ Self-Delivery (Own Waybill):
 
 Platform Logistics:
 - Vendo arranges delivery on your behalf
-- Logistics fee: ₦[AMOUNT] per order (shown per product during upload)
+- Logistics fee: shown per product during upload (varies by category and courier)
 - Fee is deducted from your payout
 - Platform handles delivery issues
 - You must package products properly
@@ -53,19 +53,19 @@ Delivery timeframes:
     content: `You are solely responsible for fulfilling orders assigned to your Vendo store within the delivery timeframe stated during onboarding (Local suppliers: 2–3 business days; Dropship suppliers: 14–21 business days). Failure to fulfil orders on time or accurately may result in penalties, negative reviews, or account suspension. Vendo acts as a marketplace facilitator and is not liable for supplier fulfilment failures. Customer interactions are handled by Vee AI on Telegram and WhatsApp.`,
   },
   {
-    title: "5. KYC & Identity Verification",
+    title: "6. KYC & Identity Verification",
     content: `Your KYC documents are stored securely in private Vendo storage and are only accessible to the Vendo administrative team for verification purposes. Your documents will not be shared with third parties except where required by Nigerian law or financial regulations. You consent to Vendo conducting reasonable verification checks on your submitted documents.`,
   },
   {
-    title: "6. Account Termination",
+    title: "7. Account Termination",
     content: `Vendo reserves the right to suspend or permanently terminate your supplier account for: (a) providing false information, (b) repeated customer complaints, (c) non-fulfilment of orders, (d) violation of product standards, or (e) any activity deemed harmful to the platform or its users. Upon termination, any unpaid commissions due to you will be reviewed and settled within 14 business days, subject to outstanding disputes.`,
   },
   {
-    title: "7. Privacy & Data",
+    title: "8. Privacy & Data",
     content: `By using this platform, you consent to the collection and processing of your business data, transaction history, and product information as outlined in our Privacy Policy. Your data will be used to operate Vendo, power Vee AI's product recommendations, and comply with applicable Nigerian laws including the Nigeria Data Protection Regulation (NDPR). You have the right to request deletion of your data, subject to legal retention requirements.`,
   },
   {
-    title: "8. Governing Law",
+    title: "9. Governing Law",
     content: `This agreement is governed by the laws of the Federal Republic of Nigeria. Any disputes arising from this agreement shall first be addressed through good-faith negotiation. If unresolved, disputes shall be subject to the jurisdiction of the courts of Anambra State, Nigeria. Rocybits Technology is the registered operator of Vendo and its associated services, including the Vee AI customer assistant.`,
   },
 ];

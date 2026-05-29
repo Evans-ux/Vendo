@@ -39,6 +39,10 @@ export default function SignupPage() {
       if (result?.error) toast.error(result.error)
       else if (result?.success) {
         toast.success('Account created! Check your email to verify.')
+        // Store email so verify-email page can resend if needed
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('signup_email', formData.email)
+        }
         router.push('/auth/verify-email')
       }
     } catch {
@@ -272,7 +276,7 @@ export default function SignupPage() {
               type="button"
               onClick={handleGoogleSignIn}
               disabled={isGoogleLoading || isLoading}
-              className="w-full py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+              className="w-full py-3.5 bg-background hover:bg-muted/50 border border-border text-foreground font-medium rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
             >
               {isGoogleLoading ? (
                 <>
