@@ -26,12 +26,18 @@ export default async function AdminKYCPage() {
   // Helper to generate signed URLs for private documents
   const generateSignedUrl = async (filePath: string | null) => {
     if (!filePath) return null;
+    
+    // Strip bucket name prefix if it exists in the filePath
+    const cleanPath = filePath.startsWith('kyc-documents/')
+      ? filePath.replace('kyc-documents/', '')
+      : filePath;
+
     const { data, error } = await supabase.storage
       .from('kyc-documents') // Assuming 'kyc-documents' is your private bucket name
-      .createSignedUrl(filePath, 3600); // URL valid for 1 hour
+      .createSignedUrl(cleanPath, 3600); // URL valid for 1 hour
 
     if (error) {
-      console.error("Error generating signed URL:", error);
+      console.error("Error generating signed URL for path:", cleanPath, error);
       return null;
     }
     return data?.signedUrl || null;
