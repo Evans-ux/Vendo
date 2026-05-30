@@ -1,11 +1,3 @@
-/**
- * GET  /api/supplier/onboard/verify-account?account_number=XXXX&account_bank=044
- *
- * Proxies to Flutterwave's account resolution endpoint.
- * Returns the verified account holder name for the given account number + bank code.
- * Keeps the Flutterwave secret key server-side only.
- */
-
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -17,45 +9,80 @@ const FLW_SECRET = (
 )?.trim();
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const account_number = searchParams.get("account_number");
-  const account_bank = searchParams.get("account_bank");
-
-  if (!account_number || !account_bank) {
-    return NextResponse.json(
-      { message: "account_number and account_bank are required" },
-      { status: 400 }
-    );
-  }
-
-  if (!/^\d{10}$/.test(account_number)) {
-    return NextResponse.json(
-      { message: "Account number must be exactly 10 digits" },
-      { status: 400 }
-    );
-  }
-
   try {
-    const res = await fetch(
-      `https://api.flutterwave.com/v3/accounts/resolve?account_number=${account_number}&account_bank=${account_bank}`,
+    const { searchParams } = new URL(request.url);
+
+    const account_number = searchParams.get("account_number");
+    const account_bank = searchParams.get("account_bank");
+
+    if (!account_number || !account_bank) {
+      return NextResponse.json(
+        { message: "account_number and account_bank are required" },
+        { status: 400 }
+      );
+    }
+
+    if (!/^\d{10}$/.test(account_number)) {
+      return NextResponse.json(
+        { message: "Account number must be exactly 10 digits" },
+        { status: 400 }
+      );
+    }
+
+    if (!FLW_SECRET) {
+      return NextResponse.json(
+        { message: "Flutterwave secret key is missing" },
+        { status: 500 }
+      );
+    }
+
+    const flutterwaveResponse = await fetch(
+       "https://api.flutterwave.com/v3/accounts/resolve",
       {
-        method: "GET",
+        method: "POST",
         headers: {
           Authorization: `Bearer ${FLW_SECRET}`,
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          account_number,
+          account_bank,
+        }),
       }
     );
 
-    const data = await res.json();
+    const rawResponse = await flutterwaveResponse.text();
 
-    if (!res.ok || data.status !== "success") {
-      console.error("Flutterwave verification error:", data);
-      
+    let data: any;
+
+    try {
+      data = JSON.parse(rawResponse);
+    } catch {
+      console.error(
+        "Flutterwave returned non-json response:",
+        rawResponse.substring(0, 500)
+      );
+
       return NextResponse.json(
-        { 
-          message: data.message || "Could not verify account. Check the details and try again.",
-          provider_error: data.message
+        {
+          message: "Flutterwave returned an invalid response",
+          provider_response: rawResponse.substring(0, 200),
+        },
+        { status: 500 }
+      );
+    }
+
+    if (
+      !flutterwaveResponse.ok ||
+      data.status?.toLowerCase() !== "success"
+    ) {
+      console.error("Flutterwave verification error:", data);
+
+      return NextResponse.json(
+        {
+          message:
+            data.message ||
+            "Could not verify account. Check details and try again.",
         },
         { status: 400 }
       );
@@ -67,9 +94,11 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Flutterwave account resolve error:", error);
-    
+
     return NextResponse.json(
-      { message: "Verification service unavailable. Please try again." },
+      {
+        message: "Verification service unavailable",
+      },
       { status: 500 }
     );
   }

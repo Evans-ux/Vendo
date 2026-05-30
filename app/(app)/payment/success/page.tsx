@@ -88,12 +88,6 @@ export default async function PaymentSuccessPage({
           </div>
 
           <div className="space-y-3">
-            <Link
-              href="/"
-              className="block w-full py-3 bg-brand-orange hover:bg-brand-orange-hover text-white font-semibold rounded-xl transition-colors"
-            >
-              Back to Home
-            </Link>
             <p className="text-xs text-muted">
               Track your order by messaging <strong>@VeeVendo_bot</strong> on Telegram and typing /orders
             </p>

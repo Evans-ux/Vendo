@@ -370,7 +370,10 @@ export default function KycStep2Client() {
             >
               <option value="">Select your bank</option>
               {banks.map((b) => (
-                <option key={b.code} value={b.code}>{b.name}</option>
+                <option
+  key={`${b.code}-${b.name}`}
+   value={b.code}
+   >{b.name}</option>
               ))}
             </select>
           )}

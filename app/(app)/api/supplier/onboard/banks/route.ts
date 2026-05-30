@@ -69,16 +69,23 @@ export async function GET() {
     }
 
     // Return sorted list with id (code) and name
-    const banks: { code: string; name: string }[] = data.data
-      .map((b: { code: string; name: string }) => ({
-        code: String(b.code),
-        name: b.name,
-      }))
-      .sort((a: { name: string }, b: { name: string }) =>
-        a.name.localeCompare(b.name)
-      );
+    const uniqueBanks = Array.from(
+  new Map(
+    data.data.map((bank: { code: string; name: string }) => [
+      `${bank.code}-${bank.name}`,
+      {
+        code: String(bank.code),
+        name: bank.name,
+      },
+    ])
+  ).values()
+);
 
-    return NextResponse.json({ banks });
+const banks = uniqueBanks.sort((a:any , b:any) =>
+  a.name.localeCompare(b.name)
+);
+
+return NextResponse.json({ banks });
   } catch (error: any) {
     console.error("Internal banks fetch error:", error);
     return NextResponse.json(

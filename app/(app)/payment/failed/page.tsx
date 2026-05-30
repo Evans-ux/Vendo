@@ -38,12 +38,6 @@ export default async function PaymentFailedPage({
                 Try Again
               </Link>
             )}
-            <Link
-              href="/"
-              className="block w-full py-3 border border-border text-muted hover:text-foreground hover:bg-surface font-medium rounded-xl transition-colors"
-            >
-              Back to Home
-            </Link>
           </div>
 
           <p className="text-xs text-muted mt-6">
