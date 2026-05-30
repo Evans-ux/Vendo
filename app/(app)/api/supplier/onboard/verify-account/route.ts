@@ -9,35 +9,42 @@ const FLW_SECRET = (
 )?.trim();
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+
+  const account_number = searchParams.get("account_number");
+  const account_bank = searchParams.get("account_bank");
+
+  if (!account_number || !account_bank) {
+    return NextResponse.json(
+      {
+        message: "account_number and account_bank are required",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!/^\d{10}$/.test(account_number)) {
+    return NextResponse.json(
+      {
+        message: "Account number must be exactly 10 digits",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!FLW_SECRET) {
+    return NextResponse.json(
+      {
+        message: "Flutterwave secret key is missing",
+      },
+      { status: 500 }
+    );
+  }
+
   try {
-    const { searchParams } = new URL(request.url);
-
-    const account_number = searchParams.get("account_number");
-    const account_bank = searchParams.get("account_bank");
-
-    if (!account_number || !account_bank) {
-      return NextResponse.json(
-        { message: "account_number and account_bank are required" },
-        { status: 400 }
-      );
-    }
-
-    if (!/^\d{10}$/.test(account_number)) {
-      return NextResponse.json(
-        { message: "Account number must be exactly 10 digits" },
-        { status: 400 }
-      );
-    }
-
-    if (!FLW_SECRET) {
-      return NextResponse.json(
-        { message: "Flutterwave secret key is missing" },
-        { status: 500 }
-      );
-    }
-
+    // ✅ ONLY CHANGE YOU REQUESTED (GET → POST)
     const flutterwaveResponse = await fetch(
-       "https://api.flutterwave.com/v3/accounts/resolve",
+      "https://api.flutterwave.com/v3/accounts/resolve",
       {
         method: "POST",
         headers: {
