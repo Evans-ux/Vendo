@@ -11,7 +11,7 @@ export async function GET() {
         kycStatus: true,
         flwSubaccountId: true,
         bankCode: true, 
-        account_number: true,
+        accountNumber: true,
         user: {
           select: {
             email: true,
