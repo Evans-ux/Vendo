@@ -59,21 +59,57 @@ export async function POST(request: NextRequest) {
     // Selling price = base price + 10% markup, rounded to 2dp
     const sellingPrice = Math.round(basePrice * 1.10 * 100) / 100;
 
-    // Calculate logistics fee based on category for PLATFORM_LOGISTICS
-    let logisticsFee = null;
+    // Calculate logistics fee for PLATFORM_LOGISTICS products.
+    // Try to fetch a live rate from Sendbox first; fall back to static
+    // estimates only if the API call fails so we never block product creation.
+    let logisticsFee: number | null = null;
     if (deliveryMethod === "PLATFORM_LOGISTICS") {
-      const fees: Record<string, number> = {
-        'Accessories': 800,
-        'Footwear': 1500,
-        'Clothing': 1200,
-        'Tops': 1200,
-        'Bottoms': 1200,
-        'Dresses': 1200,
-        'Bags': 2000,
-        'Jewelry': 800,
-        'Other': 1500,
+      const staticFees: Record<string, number> = {
+        Accessories: 800,
+        Footwear:    1500,
+        Clothing:    1200,
+        Tops:        1200,
+        Bottoms:     1200,
+        Dresses:     1200,
+        Bags:        2000,
+        Jewelry:     800,
+        Other:       1500,
       };
-      logisticsFee = fees[category] || 1500;
+
+      try {
+        // Call our own cheapest-rate endpoint (shares token + payload logic)
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://vendo.com.ng";
+        const rateRes = await fetch(`${siteUrl}/api/sendbox/cheapest-rate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // Pass the internal secret so the route knows this is server-side
+            "x-internal-secret": process.env.INTERNAL_API_SECRET ?? "",
+          },
+          body: JSON.stringify({
+            category:    category || "Other",
+            originState: dbUser.supplier.state ?? undefined,
+          }),
+        });
+
+        if (rateRes.ok) {
+          const rateData = await rateRes.json();
+          if (typeof rateData.price === "number" && rateData.price > 0) {
+            logisticsFee = rateData.price;
+            console.log(
+              `[Product Create] Live logistics fee for "${category}": ₦${logisticsFee} (${rateData.source})`
+            );
+          }
+        }
+      } catch (rateErr: any) {
+        console.warn("[Product Create] Sendbox rate fetch failed:", rateErr.message);
+      }
+
+      // Use static fallback if live rate wasn't obtained
+      if (!logisticsFee) {
+        logisticsFee = staticFees[category] ?? 1500;
+        console.log(`[Product Create] Using static logistics fee for "${category}": ₦${logisticsFee}`);
+      }
     }
 
     const product = await prisma.product.create({

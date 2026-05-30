@@ -52,18 +52,6 @@ export async function GET(request: NextRequest) {
     if (!res.ok || data.status !== "success") {
       console.error("Flutterwave verification error:", data);
       
-      // ── TEST MODE BYPASS ──
-      // If we are in test mode and verification fails, allow a mock success 
-      // so the user can test the onboarding flow.
-      if (process.env.FLW_MODE !== "production") {
-        console.log("Test mode: Returning mock success for verification");
-        return NextResponse.json({
-          account_name: "TEST ACCOUNT (MOCK)",
-          account_number: account_number,
-          mock: true
-        });
-      }
-
       return NextResponse.json(
         { 
           message: data.message || "Could not verify account. Check the details and try again.",
@@ -80,15 +68,6 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error("Flutterwave account resolve error:", error);
     
-    // Fallback for network errors in test mode
-    if (process.env.FLW_MODE !== "production") {
-       return NextResponse.json({
-          account_name: "TEST ACCOUNT (NETWORK FALLBACK)",
-          account_number: account_number,
-          mock: true
-        });
-    }
-
     return NextResponse.json(
       { message: "Verification service unavailable. Please try again." },
       { status: 500 }

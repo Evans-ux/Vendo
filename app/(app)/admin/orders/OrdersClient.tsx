@@ -33,12 +33,12 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_BADGE: Record<string, string> = {
-  PENDING:    "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300",
-  CONFIRMED:  "bg-blue-100   dark:bg-blue-900/30   text-blue-700   dark:text-blue-300",
-  PROCESSING: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
-  SHIPPED:    "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300",
-  DELIVERED:  "bg-green-100  dark:bg-green-900/30  text-green-700  dark:text-green-300",
-  CANCELLED:  "bg-red-100    dark:bg-red-900/30    text-red-700    dark:text-red-300",
+  PENDING:    "bg-amber-100 dark:bg-yellow-900/30 text-amber-800 dark:text-yellow-300",
+  CONFIRMED:  "bg-blue-100   dark:bg-blue-900/30   text-blue-800   dark:text-blue-300",
+  PROCESSING: "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300",
+  SHIPPED:    "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300",
+  DELIVERED:  "bg-green-100  dark:bg-green-900/30  text-green-800  dark:text-green-300",
+  CANCELLED:  "bg-red-100    dark:bg-red-900/30    text-red-800    dark:text-red-300",
 };
 
 export default function OrdersClient({ orders }: { orders: Order[] }) {
@@ -150,8 +150,8 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
                           order.paymentStatus === "PAID"
-                            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
-                            : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300"
+                            ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
+                            : "bg-amber-100 dark:bg-yellow-900/30 text-amber-800 dark:text-yellow-300"
                         }`}>
                           {order.paymentStatus}
                         </span>

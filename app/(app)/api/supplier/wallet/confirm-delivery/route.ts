@@ -67,26 +67,44 @@ export async function POST(request: NextRequest) {
     >();
 
     for (const item of order.items) {
-      const supplierId = item.product.supplierId;
-      // Supplier earns basePrice (we keep the 10% markup as commission)
-      const earning = Number(item.product.basePrice) * item.quantity;
+      const supplierId = item.product.supplierId
+      const orderNum   = (order as any).orderNumber ?? order.id.slice(0, 8).toUpperCase()
 
-      // Deduct logistics fee if platform logistics
+      /**
+       * Earnings calculation:
+       *   sellingPrice = basePrice × 1.10  (set at product creation)
+       *   platform commission = 10% of sellingPrice = 0.1 × sellingPrice = basePrice × 0.10
+       *   supplier gross = sellingPrice − commission = basePrice         ← this is basePrice
+       *
+       *   So: supplier gross per item = basePrice × quantity   ← NO extra commission deduction needed
+       *
+       *   Then for PLATFORM_LOGISTICS products, subtract the logistics fee the
+       *   supplier agreed to pay for the platform to handle delivery.
+       */
+      const grossEarning = Number(item.product.basePrice) * item.quantity
+
+      // Deduct logistics fee only if platform is handling delivery for this product
       const logisticsFee =
         item.product.deliveryMethod === "PLATFORM_LOGISTICS"
           ? Number(item.product.logisticsFee ?? 0)
-          : 0;
+          : 0
 
-      const net = earning - logisticsFee;
+      // Net earning must never go negative (safeguard against bad fee data)
+      const net = Math.max(0, grossEarning - logisticsFee)
+
+      console.log(
+        `[Confirm Delivery] Order #${orderNum} | Product: ${item.product.name} | ` +
+        `Gross: ₦${grossEarning} | Logistics: ₦${logisticsFee} | Net: ₦${net}`
+      )
 
       if (supplierEarnings.has(supplierId)) {
-        supplierEarnings.get(supplierId)!.amount += net;
+        supplierEarnings.get(supplierId)!.amount += net
       } else {
         supplierEarnings.set(supplierId, {
           supplierId,
           amount: net,
-          orderNumber: (order as any).orderNumber ?? order.id.slice(0, 8).toUpperCase(),
-        });
+          orderNumber: orderNum,
+        })
       }
     }
 

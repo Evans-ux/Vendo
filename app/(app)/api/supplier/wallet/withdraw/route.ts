@@ -1,164 +1,141 @@
 /**
  * POST /api/supplier/wallet/withdraw
  *
- * Supplier requests a payout from their available wallet balance.
- * Requires PIN verification.
- *
+ * Initiates a withdrawal/transfer for a supplier.
  * Body: { amount: number, pin: string }
  *
- * Flow:
- *  1. Verify PIN (bcrypt compare)
- *  2. Check available balance >= amount
- *  3. Debit wallet immediately (optimistic — prevents double-spend)
- *  4. Initiate Flutterwave transfer
- *  5. Create WithdrawalRequest record
- *  6. If Flutterwave fails, restore wallet balance
+ * Validates PIN (with rate-limiting/lockout), checks balance, creates a
+ * WithdrawalRequest record (PROCESSING), and triggers a Flutterwave bank transfer.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
+import { initiateTransfer } from "@/lib/flutterwave";
 
-const FLW_SECRET =
-  process.env.FLW_MODE === "production"
-    ? process.env.FLW_SECRET_KEY_LIVE
-    : process.env.FLW_SECRET_KEY_TEST;
+// In-memory store for PIN attempt rate-limiting.
+// For production serverless environments, a database or redis-based store is preferred,
+// but an in-memory map serves as a robust process-level guard.
+const pinAttempts = new Map<string, { count: number; lockedUntil: Date }>();
 
-const MIN_WITHDRAWAL = 1000; // ₦1,000 minimum
+const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_ATTEMPTS = 5;
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-
     if (authError || !user) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const { amount, pin } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const { amount, pin } = body;
 
-    if (!amount || !pin) {
-      return NextResponse.json({ message: "Amount and PIN are required" }, { status: 400 });
+    const withdrawAmount = Number(amount);
+    if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
+      return NextResponse.json({ message: "Invalid withdrawal amount" }, { status: 400 });
     }
 
-    if (typeof amount !== "number" || amount < MIN_WITHDRAWAL) {
-      return NextResponse.json(
-        { message: `Minimum withdrawal is ₦${MIN_WITHDRAWAL.toLocaleString()}` },
-        { status: 400 }
-      );
+    if (!pin) {
+      return NextResponse.json({ message: "PIN is required" }, { status: 400 });
     }
 
-    if (!/^\d{4}$/.test(String(pin))) {
-      return NextResponse.json({ message: "PIN must be 4 digits" }, { status: 400 });
-    }
-
-    // Load supplier
+    // Fetch supplier details
     const supplier = await prisma.supplier.findUnique({
       where: { userId: user.id },
     });
 
     if (!supplier) {
-      return NextResponse.json({ message: "Supplier not found" }, { status: 404 });
+      return NextResponse.json({ message: "Supplier profile not found" }, { status: 404 });
     }
 
-    // Check PIN is set
+    const supplierId = supplier.id;
+
+    // Check rate-limiting/lockout
+    const now = new Date();
+    const attemptInfo = pinAttempts.get(supplierId);
+
+    if (attemptInfo && attemptInfo.lockedUntil > now) {
+      const remainingTime = Math.ceil((attemptInfo.lockedUntil.getTime() - now.getTime()) / 1000 / 60);
+      return NextResponse.json(
+        { message: `Too many incorrect PIN attempts. Try again in ${remainingTime} minutes.` },
+        { status: 429 }
+      );
+    }
+
+    // Ensure PIN is configured
     if (!supplier.withdrawalPin) {
       return NextResponse.json(
-        { message: "You must set a withdrawal PIN in Settings before withdrawing" },
+        { message: "Withdrawal PIN has not been set. Please configure it in Settings first." },
         { status: 400 }
       );
     }
 
     // Verify PIN
-    const pinValid = await bcrypt.compare(String(pin), supplier.withdrawalPin);
-    if (!pinValid) {
-      return NextResponse.json({ message: "Incorrect PIN" }, { status: 401 });
-    }
+    const isPinValid = await bcrypt.compare(String(pin), supplier.withdrawalPin);
 
-    // Check bank details
-    if (!supplier.bankCode || !supplier.accountNumber || !supplier.accountHolderName) {
-      return NextResponse.json(
-        { message: "Bank account details are incomplete. Update them in Settings." },
-        { status: 400 }
-      );
-    }
-
-    // Check available balance
-    const available = Number(supplier.walletBalance);
-    if (available < amount) {
-      return NextResponse.json(
-        { message: `Insufficient balance. Available: ₦${available.toLocaleString()}` },
-        { status: 400 }
-      );
-    }
-
-    const flwReference = `vendo_payout_${supplier.id}_${Date.now()}`;
-
-    // Debit wallet immediately (prevents double-spend)
-    await prisma.supplier.update({
-      where: { id: supplier.id },
-      data: { walletBalance: { decrement: amount } },
-    });
-
-    // Initiate Flutterwave transfer
-    let flwTransferId: string | null = null;
-    let transferFailed = false;
-    let failureReason = "";
-
-    try {
-      const transferRes = await fetch("https://api.flutterwave.com/v3/transfers", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${FLW_SECRET}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          account_bank: supplier.bankCode,
-          account_number: supplier.accountNumber,
-          amount,
-          narration: `Vendo payout — ${supplier.businessName}`,
-          currency: "NGN",
-          reference: flwReference,
-          callback_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/flutterwave/transfer-webhook`,
-          debit_currency: "NGN",
-        }),
-      });
-
-      const transferData = await transferRes.json();
-
-      if (!transferRes.ok || transferData.status !== "success") {
-        transferFailed = true;
-        failureReason = transferData.message || "Flutterwave transfer failed";
+    if (!isPinValid) {
+      // Record failure and increment attempts
+      const currentCount = attemptInfo ? attemptInfo.count + 1 : 1;
+      if (currentCount >= MAX_ATTEMPTS) {
+        pinAttempts.set(supplierId, {
+          count: currentCount,
+          lockedUntil: new Date(Date.now() + LOCK_DURATION_MS),
+        });
+        return NextResponse.json(
+          { message: `Incorrect PIN. Maximum attempts reached. Account locked for 15 minutes.` },
+          { status: 429 }
+        );
       } else {
-        flwTransferId = String(transferData.data?.id ?? "");
+        pinAttempts.set(supplierId, {
+          count: currentCount,
+          lockedUntil: new Date(0), // not locked yet
+        });
+        return NextResponse.json(
+          { message: `Incorrect PIN. ${MAX_ATTEMPTS - currentCount} attempts remaining.` },
+          { status: 401 }
+        );
       }
-    } catch (err: any) {
-      transferFailed = true;
-      failureReason = err.message || "Network error initiating transfer";
     }
 
-    if (transferFailed) {
-      // Restore wallet balance
-      await prisma.supplier.update({
-        where: { id: supplier.id },
-        data: { walletBalance: { increment: amount } },
-      });
+    // Reset PIN attempts on successful login
+    pinAttempts.delete(supplierId);
 
+    // Validate balance
+    const walletBalance = Number(supplier.walletBalance);
+    if (walletBalance < withdrawAmount) {
+      return NextResponse.json({ message: "Insufficient wallet balance" }, { status: 400 });
+    }
+
+    // Validate bank info is on file
+    if (!supplier.bankCode || !supplier.accountNumber || !supplier.bankName || !supplier.accountHolderName) {
       return NextResponse.json(
-        { message: `Transfer failed: ${failureReason}. Your balance has been restored.` },
-        { status: 500 }
+        { message: "Payout bank account details are missing or incomplete. Update bank info first." },
+        { status: 400 }
       );
     }
 
-    // Create withdrawal record + debit earnings transaction
-    await prisma.$transaction(async (tx) => {
-      await tx.withdrawalRequest.create({
+    // Create unique reference for Flutterwave transfer
+    const flwReference = `vendo_wd_${supplierId.slice(0, 8)}_${Date.now()}`;
+
+    // Perform database operations and initiate transfer
+    const withdrawal = await prisma.$transaction(async (tx) => {
+      // 1. Decrement supplier wallet balance immediately to prevent double-spending
+      await tx.supplier.update({
+        where: { id: supplierId },
         data: {
-          supplierId: supplier.id,
-          amount,
+          walletBalance: { decrement: withdrawAmount },
+        },
+      });
+
+      // 2. Create the WithdrawalRequest record
+      return await tx.withdrawalRequest.create({
+        data: {
+          supplierId,
+          amount: withdrawAmount,
           status: "PROCESSING",
-          flwTransferId,
           flwReference,
           bankName: supplier.bankName!,
           bankCode: supplier.bankCode!,
@@ -166,26 +143,70 @@ export async function POST(request: NextRequest) {
           accountHolderName: supplier.accountHolderName!,
         },
       });
+    });
 
-      await tx.earningsTransaction.create({
-        data: {
-          supplierId: supplier.id,
-          type: "DEBIT",
-          status: "WITHDRAWN",
-          amount,
-          description: `Withdrawal of ₦${amount.toLocaleString()} to ${supplier.bankName} ${supplier.accountNumber}`,
-          availableAt: new Date(),
-        },
+    try {
+      // Call Flutterwave Transfer API
+      const transferRes = await initiateTransfer({
+        account_bank: withdrawal.bankCode,
+        account_number: withdrawal.accountNumber,
+        amount: withdrawAmount,
+        narration: `Vendo Supplier Payout - ${supplier.businessName}`,
+        currency: "NGN",
+        reference: flwReference,
+        // Optional callback/webhook URL can be added here
       });
-    });
 
-    return NextResponse.json({
-      success: true,
-      message: `₦${amount.toLocaleString()} is being transferred to your ${supplier.bankName} account. This usually takes 1–3 minutes.`,
-      reference: flwReference,
-    });
+      if (transferRes && transferRes.id) {
+        // Update withdrawal record with FLW transfer ID
+        const finalStatus =
+          transferRes.status?.toUpperCase() === "SUCCESSFUL"
+            ? "COMPLETED"
+            : "PROCESSING";
+
+        await prisma.withdrawalRequest.update({
+          where: { id: withdrawal.id },
+          data: {
+            flwTransferId: String(transferRes.id),
+            status: finalStatus as any,
+            completedAt: finalStatus === "COMPLETED" ? new Date() : null,
+          },
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: finalStatus === "COMPLETED" ? "Withdrawal completed successfully!" : "Withdrawal is processing.",
+          withdrawalId: withdrawal.id,
+          status: finalStatus,
+        });
+      } else {
+        throw new Error("Invalid transfer response from Flutterwave");
+      }
+    } catch (apiErr: any) {
+      console.error("[Withdrawal API] Flutterwave transfer failed:", apiErr.message);
+
+      // Revert wallet balance & mark withdrawal request as FAILED
+      await prisma.$transaction([
+        prisma.supplier.update({
+          where: { id: supplierId },
+          data: { walletBalance: { increment: withdrawAmount } },
+        }),
+        prisma.withdrawalRequest.update({
+          where: { id: withdrawal.id },
+          data: {
+            status: "FAILED",
+            failureReason: apiErr.message || "Failed to initiate Flutterwave transfer",
+          },
+        }),
+      ]);
+
+      return NextResponse.json(
+        { message: `Payout transfer failed: ${apiErr.message || "Please contact support"}` },
+        { status: 500 }
+      );
+    }
   } catch (error: any) {
-    console.error("Withdrawal error:", error);
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+    console.error("[Withdrawal Request Error]", error);
+    return NextResponse.json({ message: "Internal server error", error: error.message }, { status: 500 });
   }
 }

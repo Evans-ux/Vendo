@@ -44,7 +44,10 @@ export async function GET() {
   try {
     if (!FLW_SECRET) {
       console.error("FLW_SECRET is missing. MODE:", process.env.FLW_MODE);
-      return NextResponse.json({ banks: FALLBACK_BANKS, warning: "Using fallback banks due to missing config" });
+      return NextResponse.json(
+        { message: "Flutterwave configuration is missing." },
+        { status: 500 }
+      );
     }
 
     const res = await fetch("https://api.flutterwave.com/v3/banks/NG", {
@@ -59,12 +62,10 @@ export async function GET() {
 
     if (!res.ok || data.status !== "success") {
       console.error("Flutterwave API error:", data);
-      // Return fallback banks so the UI doesn't break
-      return NextResponse.json({ 
-        banks: FALLBACK_BANKS, 
-        warning: "Using fallback banks due to provider error",
-        provider_error: data.message 
-      });
+      return NextResponse.json(
+        { message: data.message || "Failed to load bank codes from provider." },
+        { status: 400 }
+      );
     }
 
     // Return sorted list with id (code) and name
@@ -80,10 +81,9 @@ export async function GET() {
     return NextResponse.json({ banks });
   } catch (error: any) {
     console.error("Internal banks fetch error:", error);
-    return NextResponse.json({ 
-      banks: FALLBACK_BANKS, 
-      warning: "Using fallback banks due to internal error",
-      error: error.message 
-    });
+    return NextResponse.json(
+      { message: "Internal error loading bank codes.", error: error.message },
+      { status: 500 }
+    );
   }
 }

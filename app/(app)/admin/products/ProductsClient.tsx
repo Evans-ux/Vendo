@@ -154,8 +154,8 @@ export default function ProductsClient({ products }: { products: Product[] }) {
 
                   <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
                     product.isApproved
-                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
-                      : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300"
+                      ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
+                      : "bg-amber-100 dark:bg-yellow-900/30 text-amber-800 dark:text-yellow-300"
                   }`}>
                     {product.isApproved ? "Approved" : "Pending"}
                   </span>
@@ -243,8 +243,8 @@ export default function ProductsClient({ products }: { products: Product[] }) {
 
                 <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${
                   selectedProduct.isApproved
-                    ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
-                    : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300"
+                    ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
+                    : "bg-amber-100 dark:bg-yellow-900/30 text-amber-800 dark:text-yellow-300"
                 }`}>
                   {selectedProduct.isApproved ? "Approved" : "Pending Approval"}
                 </span>

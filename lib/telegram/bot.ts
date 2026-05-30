@@ -591,7 +591,58 @@ function createBot(): Telegraf {
     // ── Order lookup and delivery confirmation handler ────────────────────────
     const orderNumMatch = userMessage.match(/(?:order\s*#?\s*|#)?(VND[- ]?\d+(?:[- ]?\d+)?)/i);
     const lowerMsg = userMessage.toLowerCase();
+    
+    // Check if the user is reporting they HAVE NOT received their order
+    const isNegativeReceive = /\b(not|never|haven't|havent|don't|dont|didn't|didnt|still\s+waiting|where\s+is)\b.*\b(received|receive|delivered|delivery|package|goods|order)\b/i.test(lowerMsg);
     const isOrderIntent = /\b(confirm|received|receive|delivered|delivery|order|orders|track|status|package)\b/.test(lowerMsg);
+
+    if (isNegativeReceive && !pending) {
+      try {
+        await withTyping(ctx, "typing", async () => {
+          const orders = await getUserOrders(telegramId);
+          if (orders.length === 0) {
+            await ctx.reply("📦 I couldn't find any orders on your account to track. Let me know if you want to /shop! 🛍️");
+            return;
+          }
+          
+          // Let's check the most recent active/undelivered order
+          const activeOrder = orders.find((o: any) => o.status !== "DELIVERED" && o.status !== "CANCELLED") || orders[0];
+          const itemsList = activeOrder.items.map((i: any) => `• ${i.product.name} (x${i.quantity})`).join("\n");
+          const orderNumber = activeOrder.orderNumber;
+          
+          let responseText = "";
+          if (activeOrder.status === "PENDING") {
+            responseText = `⏳ *Order #${orderNumber} is Pending*\n\n` +
+              `Items:\n${itemsList}\n\n` +
+              `We've received your order, but payment hasn't cleared or the supplier hasn't confirmed it yet. If you've already paid, no worries — the supplier will start preparing it soon!`;
+          } else if (activeOrder.status === "CONFIRMED") {
+            responseText = `📦 *Order #${orderNumber} is Confirmed!*\n\n` +
+              `Items:\n${itemsList}\n\n` +
+              `The supplier is currently preparing your package. 🚚 LOCAL suppliers deliver in 2-3 business days, while DROPSHIP suppliers take 14-21 days.\n\n` +
+              `I will notify you here the moment it gets shipped! Stay tuned. 😊`;
+          } else if (activeOrder.status === "SHIPPED") {
+            responseText = `🚚 *Order #${orderNumber} has Shipped!*\n\n` +
+              `Items:\n${itemsList}\n\n` +
+              `Your package is currently in transit! It should arrive very soon.\n\n` +
+              `*Note:* Once it actually gets to you, please remember to click the confirmation button to release payment to the supplier. (Please *do not* click it until you hold the package in your hands!)`;
+          } else if (activeOrder.status === "DELIVERED") {
+            responseText = `✅ *Order #${orderNumber} is marked Delivered!*\n\n` +
+              `Items:\n${itemsList}\n\n` +
+              `Our records show this order was already confirmed as received. If you have any issues or didn't actually receive it, please contact Rocybits support immediately!`;
+          } else {
+            responseText = `❓ *Order #${orderNumber} Status: ${activeOrder.status}*\n\n` +
+              `Items:\n${itemsList}\n\n` +
+              `If you need help tracking this, just ask!`;
+          }
+          
+          await ctx.reply(responseText, { parse_mode: "Markdown" });
+        });
+      } catch (err) {
+        console.error("Negative receive handling error:", err);
+        await ctx.reply("😅 I had trouble checking your order status. Please try typing /orders to see your recent orders!");
+      }
+      return;
+    }
 
     if (orderNumMatch || (isOrderIntent && !pending)) {
       try {
@@ -689,7 +740,7 @@ function createBot(): Telegraf {
     try {
       await withTyping(ctx, "typing", async () => {
         const lowerMsg = userMessage.toLowerCase();
-        const isLikelyProductQuery = /\b(show|find|want|need|looking|buy|order|price|cheap|sneaker|shoe|shirt|dress|bag|trouser|jean|jacket|cap|watch|ring|necklace|ankara|agbada|kaftan|under|below|above|₦|naira)\b/.test(lowerMsg);
+        const isLikelyProductQuery = /\b(show|find|want|need|looking|buy|order|price|cheap|sneaker|shoe|shirt|dress|bag|trouser|jean|jacket|cap|watch|ring|necklace|ankara|agbada|kaftan|under|below|above|₦|naira|have|available|stock|catalog|sell|product|products|item|items|store|shop|stuff|wear|clothe|clothes|anything|something)\b/.test(lowerMsg);
 
         // Run user lookup and smart product search in parallel
         const [user, products] = await Promise.all([

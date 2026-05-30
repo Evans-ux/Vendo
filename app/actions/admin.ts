@@ -117,6 +117,8 @@ export async function approveKYC(supplierId: string) {
           account_number: supplier.accountNumber,
           business_name: supplier.businessName,
           business_email: supplier.user.email,
+          business_contact: supplier.user.name || supplier.businessName,
+          business_contact_mobile: supplier.phone,
           country: 'NG',
           split_type: 'percentage',
           // Supplier gets 90% — platform keeps 10% commission automatically

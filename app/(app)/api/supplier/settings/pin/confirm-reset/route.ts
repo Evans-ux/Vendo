@@ -1,10 +1,13 @@
 /**
- * POST /api/supplier/settings/pin
+ * POST /api/supplier/settings/pin/confirm-reset
  *
- * Set or change the supplier's 4-digit withdrawal PIN.
+ * Resets the withdrawal PIN for a supplier who has clicked the recovery email link
+ * and is currently logged in via a recovery session.
+ * Body: { newPin: string, confirmPin: string }
  *
- * Body (set new PIN):    { pin: string, confirmPin: string }
- * Body (change PIN):     { currentPin: string, pin: string, confirmPin: string }
+ * Because the recovery link automatically authenticates the user, we can verify
+ * their active session, validate the PIN strength, and update the PIN without
+ * requiring the forgotten current PIN.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,16 +19,21 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+
     if (authError || !user) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { message: "Session expired or invalid. Please request a new reset link." },
+        { status: 401 }
+      );
     }
 
-    const { currentPin, pin, confirmPin } = await request.json();
+    const { newPin, confirmPin } = await request.json().catch(() => ({}));
 
-    if (!pin || !confirmPin) {
+    if (!newPin || !confirmPin) {
       return NextResponse.json({ message: "PIN and confirmation are required" }, { status: 400 });
     }
-    const pinStr = String(pin);
+
+    const pinStr = String(newPin);
     if (!/^\d{4}$/.test(pinStr)) {
       return NextResponse.json({ message: "PIN must be exactly 4 digits" }, { status: 400 });
     }
@@ -35,8 +43,11 @@ export async function POST(request: NextRequest) {
 
     // Enforce PIN strength (no repeating or simple sequential sequences)
     const repeats = ["0000", "1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999"];
-    const sequentials = ["1234", "2345", "3456", "4567", "5678", "6789", "0123", "4321", "3210", "9876", "8765", "7654", "6543", "5432"];
-    
+    const sequentials = [
+      "1234", "2345", "3456", "4567", "5678", "6789", "0123",
+      "4321", "3210", "9876", "8765", "7654", "6543", "5432"
+    ];
+
     if (repeats.includes(pinStr)) {
       return NextResponse.json({ message: "Weak PIN: Repeating numbers are not allowed." }, { status: 400 });
     }
@@ -44,38 +55,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Weak PIN: Sequential numbers are not allowed." }, { status: 400 });
     }
 
-    const supplier = await prisma.supplier.findUnique({ where: { userId: user.id } });
+    const supplier = await prisma.supplier.findUnique({
+      where: { userId: user.id },
+    });
+
     if (!supplier) {
-      return NextResponse.json({ message: "Supplier not found" }, { status: 404 });
+      return NextResponse.json({ message: "Supplier profile not found" }, { status: 404 });
     }
 
-    // If PIN already exists, require current PIN to change it
-    if (supplier.withdrawalPin) {
-      if (!currentPin) {
-        return NextResponse.json(
-          { message: "Current PIN is required to change your PIN" },
-          { status: 400 }
-        );
-      }
-      const valid = await bcrypt.compare(String(currentPin), supplier.withdrawalPin);
-      if (!valid) {
-        return NextResponse.json({ message: "Current PIN is incorrect" }, { status: 401 });
-      }
-    }
+    // Hash the new PIN
+    const hashedPin = await bcrypt.hash(pinStr, 12);
 
-    const hashed = await bcrypt.hash(String(pin), 12);
-
+    // Update the supplier's PIN
     await prisma.supplier.update({
       where: { id: supplier.id },
-      data: { withdrawalPin: hashed },
+      data: { withdrawalPin: hashedPin },
     });
 
     return NextResponse.json({
       success: true,
-      message: supplier.withdrawalPin ? "PIN changed successfully" : "PIN set successfully",
+      message: "PIN has been reset successfully. You can now use your new PIN.",
     });
   } catch (error: any) {
-    console.error("PIN update error:", error);
+    console.error("[Confirm PIN Reset] Error:", error);
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }
 }

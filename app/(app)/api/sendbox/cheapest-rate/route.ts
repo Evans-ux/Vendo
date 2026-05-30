@@ -1,20 +1,24 @@
 /**
  * POST /api/sendbox/cheapest-rate
  *
- * Fetches real-time shipping rates from Sendbox for a given product category.
+ * Fetches real-time shipping rates from Sendbox for a given product.
  * Returns the cheapest available courier rate so the supplier knows the
  * logistics fee before listing their product.
  *
- * Body: { category: string, originState?: string, weight?: number }
+ * Body: { category?: string, originState?: string, weight?: number }
  *
- * The origin defaults to Onitsha (Vendo HQ) if not provided.
- * Weight defaults are based on product category.
+ * Uses Sendbox's shipment_delivery_quote endpoint with the correct payload
+ * structure including dimension object, service_type, channel_code, etc.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-const SENDBOX_TOKEN = process.env.SENDBOX_API_KEY || process.env.SENDBOX_ACCESS_TOKEN || "";
+// Sendbox token — use SENDBOX_API_KEY from env
+const SENDBOX_TOKEN = (
+  process.env.SENDBOX_API_KEY || process.env.SENDBOX_ACCESS_TOKEN || ""
+).trim();
+
 const SENDBOX_BASE = "https://api.sendbox.co";
 
 // Default weights (kg) per category — used when supplier doesn't specify
@@ -29,8 +33,11 @@ const CATEGORY_WEIGHTS: Record<string, number> = {
   Other:       0.8,
 };
 
-// Default dimensions (cm) per category
-const CATEGORY_DIMENSIONS: Record<string, { length: number; width: number; height: number }> = {
+// Default dimensions (cm) per category — matches Sendbox dimension object format
+const CATEGORY_DIMENSIONS: Record<
+  string,
+  { length: number; width: number; height: number }
+> = {
   Footwear:    { length: 35, width: 25, height: 15 },
   Tops:        { length: 30, width: 25, height: 5  },
   Bottoms:     { length: 35, width: 30, height: 5  },
@@ -43,49 +50,35 @@ const CATEGORY_DIMENSIONS: Record<string, { length: number; width: number; heigh
 
 // Vendo default origin — Onitsha, Anambra
 const DEFAULT_ORIGIN = {
-  name: "Vendo Supplier",
-  street: "Onitsha Main Market",
-  city: "Onitsha",
-  state: "Anambra",
-  country: "NG",
+  name:      "Vendo Supplier",
+  street:    "Onitsha Main Market",
+  city:      "Onitsha",
+  state:     "Anambra",
+  country:   "NG",
   post_code: "434101",
-  phone: "+2348012345678",
+  phone:     "+2348012345678",
 };
 
 // Default destination — Lagos (most common delivery city in Nigeria)
 const DEFAULT_DESTINATION = {
-  name: "Customer",
-  street: "Lagos Island",
-  city: "Lagos Island",
-  state: "Lagos",
-  country: "NG",
+  name:      "Customer",
+  street:    "Lagos Island",
+  city:      "Lagos Island",
+  state:     "Lagos",
+  country:   "NG",
   post_code: "101001",
-  phone: "+2348012345678",
+  phone:     "+2348012345678",
 };
 
 export async function POST(request: NextRequest) {
   try {
     // Auth check — only logged-in suppliers can fetch rates
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    if (!SENDBOX_TOKEN) {
-      // Sendbox not configured — return category-based static fallback
-      const { category = "Other" } = await request.json().catch(() => ({}));
-      const fallbackFees: Record<string, number> = {
-        Accessories: 800, Footwear: 1500, Tops: 1200, Bottoms: 1200,
-        Dresses: 1200, Bags: 2000, Jewelry: 800, Other: 1500,
-      };
-      return NextResponse.json({
-        price: fallbackFees[category] ?? 1500,
-        courierId: null,
-        courierName: "Standard Delivery",
-        source: "static_fallback",
-        note: "SENDBOX_API_KEY not configured — using static rates",
-      });
     }
 
     const body = await request.json().catch(() => ({}));
@@ -96,87 +89,130 @@ export async function POST(request: NextRequest) {
     } = body;
 
     const weight = customWeight ?? CATEGORY_WEIGHTS[category] ?? 0.8;
-    const dims = CATEGORY_DIMENSIONS[category] ?? CATEGORY_DIMENSIONS.Other;
+    const dims =
+      CATEGORY_DIMENSIONS[category] ?? CATEGORY_DIMENSIONS.Other;
 
     const origin = originState
       ? { ...DEFAULT_ORIGIN, state: originState, city: originState }
       : DEFAULT_ORIGIN;
 
-    // Sendbox rate request payload
-    const payload = {
-      origin,
-      destination: DEFAULT_DESTINATION,
-      weight,
-      length: dims.length,
-      width: dims.width,
-      height: dims.height,
-      declared_value: 5000, // ₦5,000 default declared value
-      description: `${category} item`,
+    // ── Try live Sendbox rates ─────────────────────────────────────────────
+    if (SENDBOX_TOKEN) {
+      /**
+       * Sendbox v1 shipment_delivery_quote payload:
+       *   origin        - sender address object
+       *   destination   - recipient address object
+       *   weight        - float (kg)
+       *   dimension     - { length, width, height } (cm)  ← key fix: nested object
+       *   service_type  - "local" | "international"       ← required field
+       *   package_type  - string describing package        ← required field
+       *   incoming_option - "pickup" | "dropoff"          ← required field
+       *   channel_code  - "api"                           ← required field
+       *   total_value   - declared item value in NGN
+       */
+      const payload = {
+        origin,
+        destination:     DEFAULT_DESTINATION,
+        weight,
+        dimension: {          // ← Sendbox requires a nested dimension object
+          length: dims.length,
+          width:  dims.width,
+          height: dims.height,
+        },
+        service_type:     "local",
+        package_type:     `${category} item`,
+        incoming_option:  "pickup",
+        channel_code:     "api",
+        total_value:      5000,  // ₦5,000 default declared value
+        currency:         "NGN",
+      };
+
+      try {
+        const res = await fetch(
+          `${SENDBOX_BASE}/v1/shipments/shipment_delivery_quote`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization:  `Bearer ${SENDBOX_TOKEN}`,
+            },
+            body: JSON.stringify(payload),
+          }
+        );
+
+        if (res.ok) {
+          const data = await res.json();
+
+          // Sendbox returns rates inside data.data, data.rates, or top-level array
+          const rates: Array<{
+            id?: string;
+            service_code?: string;
+            name?: string;
+            courier?: string;
+            amount?: number;
+            price?: number;
+            eta?: string;
+            estimated_days?: number;
+          }> = data?.data ?? data?.rates ?? (Array.isArray(data) ? data : []);
+
+          if (Array.isArray(rates) && rates.length > 0) {
+            // Normalise and pick cheapest
+            const normalised = rates
+              .map((r) => ({
+                id:          r.id ?? r.service_code ?? "",
+                name:        r.name ?? r.courier ?? "Sendbox Courier",
+                amount:      r.amount ?? r.price ?? 0,
+                eta:         r.eta ?? (r.estimated_days ? `${r.estimated_days} days` : "2-3 business days"),
+              }))
+              .filter((r) => r.amount > 0)
+              .sort((a, b) => a.amount - b.amount);
+
+            if (normalised.length > 0) {
+              const cheapest = normalised[0];
+              return NextResponse.json({
+                price:       cheapest.amount,
+                courierId:   cheapest.id || null,
+                courierName: cheapest.name,
+                eta:         cheapest.eta,
+                allRates:    normalised,
+                source:      "sendbox_live",
+              });
+            }
+          }
+
+          // API responded OK but returned empty rates — log and fall through
+          console.warn("[Sendbox Rate] No rates in response:", JSON.stringify(data).slice(0, 500));
+        } else {
+          const errText = await res.text();
+          console.error("[Sendbox Rate] API error:", res.status, errText);
+        }
+      } catch (fetchErr: any) {
+        console.error("[Sendbox Rate] Fetch failed:", fetchErr.message);
+      }
+    } else {
+      console.warn("[Sendbox Rate] SENDBOX_API_KEY not configured — using static fallback");
+    }
+
+    // ── Static fallback (only reached on API failure or missing key) ───────
+    const fallbackFees: Record<string, number> = {
+      Accessories: 800,
+      Footwear:    1500,
+      Tops:        1200,
+      Bottoms:     1200,
+      Dresses:     1200,
+      Bags:        2000,
+      Jewelry:     800,
+      Other:       1500,
     };
 
-    const res = await fetch(`${SENDBOX_BASE}/v1/shipments/rates`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${SENDBOX_TOKEN}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("[Sendbox Rate] API error:", res.status, errText);
-
-      // Return static fallback on API error
-      const fallbackFees: Record<string, number> = {
-        Accessories: 800, Footwear: 1500, Tops: 1200, Bottoms: 1200,
-        Dresses: 1200, Bags: 2000, Jewelry: 800, Other: 1500,
-      };
-      return NextResponse.json({
-        price: fallbackFees[category] ?? 1500,
-        courierId: null,
-        courierName: "Standard Delivery",
-        source: "static_fallback",
-        note: `Sendbox API returned ${res.status} — using static rates`,
-      });
-    }
-
-    const data = await res.json();
-
-    // Sendbox returns an array of courier options — pick the cheapest
-    const rates: Array<{ id: string; name: string; amount: number; eta?: string }> =
-      data.data ?? data.rates ?? data ?? [];
-
-    if (!Array.isArray(rates) || rates.length === 0) {
-      const fallbackFees: Record<string, number> = {
-        Accessories: 800, Footwear: 1500, Tops: 1200, Bottoms: 1200,
-        Dresses: 1200, Bags: 2000, Jewelry: 800, Other: 1500,
-      };
-      return NextResponse.json({
-        price: fallbackFees[category] ?? 1500,
-        courierId: null,
-        courierName: "Standard Delivery",
-        source: "static_fallback",
-        note: "No rates returned from Sendbox",
-      });
-    }
-
-    // Sort by price ascending — cheapest first
-    const sorted = [...rates].sort((a, b) => (a.amount ?? 0) - (b.amount ?? 0));
-    const cheapest = sorted[0];
-
     return NextResponse.json({
-      price: cheapest.amount,
-      courierId: cheapest.id ?? null,
-      courierName: cheapest.name ?? "Sendbox Courier",
-      eta: cheapest.eta ?? "2-3 business days",
-      allRates: sorted.map((r) => ({
-        id: r.id,
-        name: r.name,
-        price: r.amount,
-        eta: r.eta,
-      })),
-      source: "sendbox_live",
+      price:       fallbackFees[category] ?? 1500,
+      courierId:   null,
+      courierName: "Standard Delivery",
+      source:      "static_fallback",
+      note:        SENDBOX_TOKEN
+        ? "Sendbox API returned no rates — using static estimates"
+        : "SENDBOX_API_KEY not configured — using static estimates",
     });
   } catch (error: any) {
     console.error("[Sendbox Rate] Unexpected error:", error);

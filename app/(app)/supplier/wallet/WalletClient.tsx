@@ -215,12 +215,12 @@ export default function WalletClient({
 
   const statusBadge = (status: string) => {
     const map: Record<string, string> = {
-      PENDING:    "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300",
-      AVAILABLE:  "bg-green-100  dark:bg-green-900/30  text-green-700  dark:text-green-300",
-      WITHDRAWN:  "bg-blue-100   dark:bg-blue-900/30   text-blue-700   dark:text-blue-300",
-      PROCESSING: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
-      COMPLETED:  "bg-green-100  dark:bg-green-900/30  text-green-700  dark:text-green-300",
-      FAILED:     "bg-red-100    dark:bg-red-900/30    text-red-700    dark:text-red-300",
+      PENDING:    "bg-amber-100 dark:bg-yellow-900/30 text-amber-800 dark:text-yellow-300",
+      AVAILABLE:  "bg-green-100  dark:bg-green-900/30  text-green-800  dark:text-green-300",
+      WITHDRAWN:  "bg-blue-100   dark:bg-blue-900/30   text-blue-800   dark:text-blue-300",
+      PROCESSING: "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300",
+      COMPLETED:  "bg-green-100  dark:bg-green-900/30  text-green-800  dark:text-green-300",
+      FAILED:     "bg-red-100    dark:bg-red-900/30    text-red-800    dark:text-red-300",
     };
     return map[status] ?? "bg-muted text-muted-foreground";
   };
@@ -289,11 +289,11 @@ export default function WalletClient({
 
         {/* Withdraw CTA */}
         {!hasPin && (
-          <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div className="rounded-xl border border-amber-300 dark:border-yellow-500/30 bg-amber-50 dark:bg-yellow-500/10 p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-700 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-300">Set a withdrawal PIN first</p>
-              <p className="text-sm text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
+              <p className="text-sm font-semibold text-amber-900 dark:text-yellow-300">Set a withdrawal PIN first</p>
+              <p className="text-sm text-amber-800 dark:text-yellow-300/80 mt-0.5">
                 You need a 4-digit PIN to withdraw funds.{" "}
                 <button
                   onClick={() => router.push("/supplier/settings")}
@@ -307,11 +307,11 @@ export default function WalletClient({
         )}
 
         {hasPin && !bankName && (
-          <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div className="rounded-xl border border-amber-300 dark:border-yellow-500/30 bg-amber-50 dark:bg-yellow-500/10 p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-700 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-300">Bank account not set</p>
-              <p className="text-sm text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
+              <p className="text-sm font-semibold text-amber-900 dark:text-yellow-300">Bank account not set</p>
+              <p className="text-sm text-amber-800 dark:text-yellow-300/80 mt-0.5">
                 Add your bank account in{" "}
                 <button onClick={() => router.push("/supplier/settings")} className="underline font-semibold">
                   Settings →
@@ -394,7 +394,7 @@ export default function WalletClient({
                       })}
                     </p>
                     {t.status === "PENDING" && t.availableAt && (
-                      <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-0.5">
+                      <p className="text-xs text-amber-700 dark:text-yellow-400 mt-0.5">
                         Available {new Date(t.availableAt).toLocaleTimeString("en-NG", {
                           hour: "2-digit", minute: "2-digit",
                         })} · {new Date(t.availableAt).toLocaleDateString("en-NG", { day: "numeric", month: "short" })}

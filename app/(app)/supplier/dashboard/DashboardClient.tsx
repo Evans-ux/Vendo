@@ -59,9 +59,9 @@ interface DashboardClientProps {
 }
 
 const KYC_STATUS_STYLES: Record<string, string> = {
-  PENDING:  "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
-  APPROVED: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30",
-  REJECTED: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30",
+  PENDING:  "bg-amber-100 dark:bg-yellow-500/10 text-amber-800 dark:text-yellow-400 border-amber-400/50 dark:border-yellow-500/30",
+  APPROVED: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30",
+  REJECTED: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30",
 };
 
 const KYC_STATUS_LABELS: Record<string, string> = {
@@ -319,11 +319,11 @@ export default function DashboardClient({
 
         {/* ── Pending KYC notice ── */}
         {supplier.kycStatus === "PENDING" && (
-          <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4">
-            <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400 mb-1">
+          <div className="rounded-xl border border-amber-300 dark:border-yellow-500/30 bg-amber-50 dark:bg-yellow-500/10 p-4">
+            <p className="text-sm font-semibold text-amber-900 dark:text-yellow-400 mb-1">
               Verification in Progress
             </p>
-            <p className="text-sm text-yellow-700/80 dark:text-yellow-300/80">
+            <p className="text-sm text-amber-800 dark:text-yellow-300/80">
               Your KYC documents are being reviewed. This usually takes 24–48 hours. Your products
               will go live once approved.
             </p>
@@ -366,18 +366,18 @@ export default function DashboardClient({
 
         {/* ── Pending balance notice ── */}
         {pendingBalance > 0 && (
-          <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 flex items-center justify-between">
+          <div className="rounded-xl border border-amber-300 dark:border-yellow-500/30 bg-amber-50 dark:bg-yellow-500/10 p-4 flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">
+              <p className="text-sm font-semibold text-amber-900 dark:text-yellow-400">
                 ₦{pendingBalance.toLocaleString()} pending
               </p>
-              <p className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
+              <p className="text-xs text-amber-700 dark:text-yellow-300/80 mt-0.5">
                 Awaiting 24hr dispute window after delivery confirmation
               </p>
             </div>
             <button
               onClick={() => router.push("/supplier/wallet")}
-              className="text-sm font-semibold text-yellow-700 dark:text-yellow-400 hover:underline whitespace-nowrap ml-4"
+              className="text-sm font-semibold text-amber-900 dark:text-yellow-400 hover:underline whitespace-nowrap ml-4"
             >
               View →
             </button>
@@ -421,11 +421,11 @@ export default function DashboardClient({
             <div className="space-y-3">
               {recentOrders.map((order) => {
                 const statusColors: Record<string, string> = {
-                  PENDING:   "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
-                  CONFIRMED: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-                  SHIPPED:   "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
-                  DELIVERED: "bg-green-500/10 text-green-600 dark:text-green-400",
-                  CANCELLED: "bg-red-500/10 text-red-600 dark:text-red-400",
+                  PENDING:   "bg-amber-100 dark:bg-yellow-500/10 text-amber-800 dark:text-yellow-400",
+                  CONFIRMED: "bg-blue-100 dark:bg-blue-500/10 text-blue-800 dark:text-blue-400",
+                  SHIPPED:   "bg-indigo-100 dark:bg-indigo-500/10 text-indigo-800 dark:text-indigo-400",
+                  DELIVERED: "bg-green-100 dark:bg-green-500/10 text-green-800 dark:text-green-400",
+                  CANCELLED: "bg-red-100 dark:bg-red-500/10 text-red-800 dark:text-red-400",
                 };
                 const statusColor = statusColors[order.status] ?? "bg-muted text-muted-foreground";
                 return (
@@ -480,8 +480,8 @@ export default function DashboardClient({
                     <span className="text-primary font-semibold text-sm">₦{product.sellingPrice.toLocaleString()}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       product.isApproved
-                        ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                        : "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
+                        ? "bg-green-100 dark:bg-green-500/10 text-green-800 dark:text-green-400"
+                        : "bg-amber-100 dark:bg-yellow-500/10 text-amber-800 dark:text-yellow-400"
                     }`}>
                       {product.isApproved ? "Live" : "Pending"}
                     </span>

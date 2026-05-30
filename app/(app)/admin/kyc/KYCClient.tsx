@@ -215,7 +215,7 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
                         <p className="font-semibold text-foreground">{s.businessName}</p>
                         <p className="text-sm text-muted-foreground">{s.user.name}</p>
                       </div>
-                      <span className="px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
+                      <span className="px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-yellow-900/30 dark:text-yellow-300">
                         Pending
                       </span>
                     </div>
@@ -343,7 +343,7 @@ export default function KYCClient({ suppliers }: { suppliers: Supplier[] }) {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
+                        <p className="text-sm text-amber-800 dark:text-yellow-400 font-medium">
                           ⚠ No bank details — FLW subaccount won't be created on approval
                         </p>
                       )}
