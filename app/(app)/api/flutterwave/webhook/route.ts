@@ -100,7 +100,13 @@ export async function POST(request: NextRequest) {
               `Order *#${orderNumber}* — ${productNames}\n\n` +
               `The supplier has been notified and will prepare your item. ` +
               `I'll update you when it's shipped! 🚚\n\n` +
-              `Type /orders to track your order.`
+              `Once you receive your order, please tap the button below to confirm receipt. This releases the payment to the supplier. 🙏\n\n` +
+              `Type /orders to track your order.`,
+              {
+                inline_keyboard: [[
+                  { text: '✅ I Received My Order', callback_data: `received:${order.id}` }
+                ]]
+              }
             )
           }
         }

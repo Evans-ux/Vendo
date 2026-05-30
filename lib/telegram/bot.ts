@@ -588,6 +588,102 @@ function createBot(): Telegraf {
         return;
       }
     }
+    // ── Order lookup and delivery confirmation handler ────────────────────────
+    const orderNumMatch = userMessage.match(/(?:order\s*#?\s*|#)?(VND[- ]?\d+(?:[- ]?\d+)?)/i);
+    const lowerMsg = userMessage.toLowerCase();
+    const isOrderIntent = /\b(confirm|received|receive|delivered|delivery|order|orders|track|status|package)\b/.test(lowerMsg);
+
+    if (orderNumMatch || (isOrderIntent && !pending)) {
+      try {
+        await withTyping(ctx, "typing", async () => {
+          let targetOrder = null;
+
+          if (orderNumMatch) {
+            const orderNumberStr = orderNumMatch[1].toUpperCase().replace(/[\s-]/g, "");
+            let queryOrderNumber = orderNumberStr;
+            if (orderNumberStr.startsWith("VND") && !orderNumberStr.includes("-")) {
+              queryOrderNumber = "VND-" + orderNumberStr.slice(3);
+            }
+            const { prisma } = await import("@/lib/prisma");
+            targetOrder = await prisma.order.findFirst({
+              where: {
+                orderNumber: { equals: queryOrderNumber, mode: "insensitive" }
+              },
+              include: {
+                items: { include: { product: { select: { name: true } } } },
+                user: true
+              }
+            });
+          }
+
+          if (targetOrder) {
+            if (targetOrder.user.telegramId !== telegramId) {
+              await ctx.reply("❌ This order does not belong to your account.");
+              return;
+            }
+            const itemsList = targetOrder.items.map(i => `• ${i.product.name} (x${i.quantity})`).join("\n");
+            const statusEmoji = targetOrder.status === "DELIVERED" ? "✅" : targetOrder.status === "SHIPPED" ? "🚚" : "⏳";
+            const paymentEmoji = targetOrder.paymentStatus === "PAID" ? "💳" : "❌";
+            
+            let text = `${statusEmoji} *Order Details*\n\n` +
+              `Order: *#${targetOrder.orderNumber}*\n` +
+              `Items:\n${itemsList}\n\n` +
+              `Total: *₦${Number(targetOrder.totalAmount).toLocaleString()}*\n` +
+              `Status: *${targetOrder.status}*\n` +
+              `Payment: *${targetOrder.paymentStatus} ${paymentEmoji}*`;
+
+            const keyboard: any[][] = [];
+            if (targetOrder.paymentStatus === "PAID" && targetOrder.status !== "DELIVERED") {
+              keyboard.push([{ text: "✅ Confirm Delivery (I Received It)", callback_data: `received:${targetOrder.id}` }]);
+            }
+            
+            await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard.length > 0 ? { inline_keyboard: keyboard } : undefined });
+            return;
+          }
+
+          // If they have general order intent but we didn't match a specific order number
+          const orders = await getUserOrders(telegramId);
+          if (orders.length === 0) {
+            await ctx.reply("📦 You don't have any orders yet! Type /shop to browse and purchase items. 🛍️");
+            return;
+          }
+
+          // Find if they have active orders that need delivery confirmation (PAID but not yet DELIVERED)
+          const confirmableOrders = orders.filter((o: any) => o.paymentStatus === "PAID" && o.status !== "DELIVERED");
+
+          if (confirmableOrders.length > 0) {
+            let replyText = `📦 *Confirm Delivery*\n\nYou have order(s) awaiting your delivery confirmation. Tap the button below to confirm you have received your items and release payment to the supplier:\n\n`;
+            
+            const keyboard: any[][] = [];
+            confirmableOrders.forEach((o: any, index: number) => {
+              const items = o.items.map((i: any) => i.product.name).join(", ");
+              replyText += `${index + 1}. *Order #${o.orderNumber}* — ${items}\n   Status: *${o.status}*\n\n`;
+              keyboard.push([{ text: `✅ Received Order #${o.orderNumber}`, callback_data: `received:${o.id}` }]);
+            });
+
+            await ctx.reply(replyText, { parse_mode: "Markdown", reply_markup: { inline_keyboard: keyboard } });
+            return;
+          } else {
+            // General order status overview
+            let replyText = `📦 *Your Recent Orders*\n\n`;
+            orders.forEach((o: any, index: number) => {
+              const items = o.items.map((i: any) => `• ${i.product.name} (x${i.quantity})`).join("\n");
+              const statusEmoji = o.status === "DELIVERED" ? "✅" : o.status === "SHIPPED" ? "🚚" : "⏳";
+              replyText += `${index + 1}. *Order #${o.orderNumber}* (${statusEmoji} ${o.status})\n` +
+                `   Items:\n${items}\n` +
+                `   Total: ₦${Number(o.totalAmount).toLocaleString()}\n\n`;
+            });
+            
+            await ctx.reply(replyText, { parse_mode: "Markdown" });
+            return;
+          }
+        });
+      } catch (err) {
+        console.error("Order lookup error:", err);
+        await ctx.reply("😅 Sorry, had trouble looking up your order details. Please try again!");
+      }
+      return;
+    }
 
     // Regular AI chat with smart product search
     try {
