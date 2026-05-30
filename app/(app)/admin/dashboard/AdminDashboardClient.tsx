@@ -112,6 +112,13 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
       link: "/admin/products",
       color: "orange",
     },
+    {
+      title: "Sub-Accounts",
+      description: "Manage and create valid subaccounts",
+      icon: "✓",
+      link: "/admin/subaccounts",
+      color: "white",
+    }
   ];
 
   return (
