@@ -56,6 +56,11 @@ export default function ProductStep3Client() {
   const [logisticsRate, setLogisticsRate] = useState<LogisticsRate | null>(null);
   const [fetchingRate, setFetchingRate] = useState(false);
 
+  // Pickup address for Sendbox
+  const [pickup, setPickup] = useState({
+    address: "", city: "", state: "", postCode: "", phone: "",
+  });
+
   const {
     register,
     handleSubmit,
@@ -89,7 +94,14 @@ export default function ProductStep3Client() {
         const res = await fetch("/api/sendbox/cheapest-rate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ category }),
+          body: JSON.stringify({
+            category,
+            pickupAddress:  pickup.address  || undefined,
+            pickupCity:     pickup.city     || undefined,
+            pickupState:    pickup.state    || undefined,
+            pickupPostCode: pickup.postCode || undefined,
+            pickupPhone:    pickup.phone    || undefined,
+          }),
         });
         const data = await res.json();
         if (!cancelled) {
@@ -176,6 +188,12 @@ export default function ProductStep3Client() {
           sizes: { available: selectedSizes },
           imageUrls,
           logisticsFee: data.deliveryMethod === "PLATFORM_LOGISTICS" ? logisticsFee : null,
+          // Pass pickup address so it can be saved on the supplier profile
+          pickupAddress:  data.deliveryMethod === "PLATFORM_LOGISTICS" ? pickup.address  : undefined,
+          pickupCity:     data.deliveryMethod === "PLATFORM_LOGISTICS" ? pickup.city     : undefined,
+          pickupState:    data.deliveryMethod === "PLATFORM_LOGISTICS" ? pickup.state    : undefined,
+          pickupPostCode: data.deliveryMethod === "PLATFORM_LOGISTICS" ? pickup.postCode : undefined,
+          pickupPhone:    data.deliveryMethod === "PLATFORM_LOGISTICS" ? pickup.phone    : undefined,
         }),
       });
 
@@ -269,11 +287,11 @@ export default function ProductStep3Client() {
               <p className="text-sm text-muted-foreground mt-1">Vendo handles delivery via Sendbox · Real-time pricing</p>
 
               {deliveryMethod === "PLATFORM_LOGISTICS" && (
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 space-y-4">
                   {fetchingRate ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Fetching live Sendbox rates...
+                      Fetching live Sendbox rates…
                     </div>
                   ) : logisticsRate ? (
                     <div className="p-3 rounded-lg bg-brand-orange/5 border border-brand-orange/20 space-y-1">
@@ -283,31 +301,95 @@ export default function ProductStep3Client() {
                           {logisticsRate.source === "sendbox_live" && (
                             <span className="ml-2 text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded-full">LIVE</span>
                           )}
+                          {logisticsRate.source === "static_fallback" && (
+                            <span className="ml-2 text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full">ESTIMATE</span>
+                          )}
                         </span>
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-brand-orange text-lg">₦{logisticsFee.toLocaleString()}</span>
-                          <button type="button" onClick={() => {
-                            setLogisticsRate(null);
-                            // Re-trigger by toggling — useEffect will re-run
-                          }} className="text-muted-foreground hover:text-foreground">
+                          <button type="button" onClick={() => setLogisticsRate(null)} className="text-muted-foreground hover:text-foreground">
                             <RefreshCw className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
                       {logisticsRate.eta && <p className="text-xs text-muted-foreground">ETA: {logisticsRate.eta}</p>}
                       {logisticsRate.source === "static_fallback" && (
-                        <p className="text-xs text-yellow-600 dark:text-yellow-400">⚠️ Using estimated rate — live pricing unavailable</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400">⚠️ Using estimated rate — live pricing unavailable</p>
                       )}
                       {basePriceNum > 0 && (
-                        <><div className="pt-2 border-t border-border mt-2 flex justify-between text-sm">
-                            <span className="text-muted-foreground">Your payout per order:</span>
-                            <span className="font-semibold text-foreground">₦{payout.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          </div><p className="text-xs text-muted-foreground/70">= your cost price minus logistics fee</p></>
+                        <div className="pt-2 border-t border-border mt-2 flex justify-between text-sm">
+                          <span className="text-muted-foreground">Your payout per order:</span>
+                          <span className="font-semibold text-foreground">₦{payout.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        </div>
                       )}
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">Select a category above to see live logistics rates</p>
                   )}
+
+                  {/* Pickup address */}
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      Pickup Address
+                      <span className="font-normal text-muted-foreground ml-1">— where Sendbox will collect</span>
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Street Address *</label>
+                        <input
+                          type="text"
+                          required
+                          value={pickup.address}
+                          onChange={(e) => setPickup({ ...pickup, address: e.target.value })}
+                          placeholder="e.g. 12 Onitsha Main Market Road"
+                          className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">City *</label>
+                        <input
+                          type="text"
+                          required
+                          value={pickup.city}
+                          onChange={(e) => setPickup({ ...pickup, city: e.target.value })}
+                          placeholder="e.g. Onitsha"
+                          className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">State *</label>
+                        <input
+                          type="text"
+                          required
+                          value={pickup.state}
+                          onChange={(e) => setPickup({ ...pickup, state: e.target.value })}
+                          placeholder="e.g. Anambra"
+                          className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Postal Code</label>
+                        <input
+                          type="text"
+                          value={pickup.postCode}
+                          onChange={(e) => setPickup({ ...pickup, postCode: e.target.value })}
+                          placeholder="e.g. 434101"
+                          className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Pickup Phone *</label>
+                        <input
+                          type="tel"
+                          required
+                          value={pickup.phone}
+                          onChange={(e) => setPickup({ ...pickup, phone: e.target.value })}
+                          placeholder="e.g. 08012345678"
+                          className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

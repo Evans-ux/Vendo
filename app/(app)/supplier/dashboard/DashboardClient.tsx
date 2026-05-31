@@ -59,9 +59,9 @@ interface DashboardClientProps {
 }
 
 const KYC_STATUS_STYLES: Record<string, string> = {
-  PENDING:  "bg-amber-100 dark:bg-yellow-500/10 text-amber-800 dark:text-yellow-400 border-amber-400/50 dark:border-yellow-500/30",
-  APPROVED: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30",
-  REJECTED: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30",
+  PENDING:  "bg-amber-100 text-amber-800 border-amber-300 dark:bg-yellow-500/10 dark:text-yellow-300 dark:border-yellow-500/30",
+  APPROVED: "bg-green-100 text-green-800 border-green-300 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30",
+  REJECTED: "bg-red-100 text-red-800 border-red-300 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30",
 };
 
 const KYC_STATUS_LABELS: Record<string, string> = {
@@ -179,7 +179,8 @@ export default function DashboardClient({
   totalEarned,
   hasPin,
   recentOrders,
-}: DashboardClientProps) {
+  unreadNotifications = 0,
+}: DashboardClientProps & { unreadNotifications?: number }) {
   const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -247,6 +248,19 @@ export default function DashboardClient({
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
+              {/* Notification Bell */}
+              <button
+                onClick={() => router.push("/supplier/notifications")}
+                className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                aria-label="Notifications"
+              >
+                <span className="text-xl">🔔</span>
+                {unreadNotifications > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                  </span>
+                )}
+              </button>
               <Button variant="ghost" onClick={handleLogout} disabled={isLoggingOut}>
                 {isLoggingOut ? "Signing out..." : "Sign out"}
               </Button>
@@ -320,10 +334,10 @@ export default function DashboardClient({
         {/* ── Pending KYC notice ── */}
         {supplier.kycStatus === "PENDING" && (
           <div className="rounded-xl border border-amber-300 dark:border-yellow-500/30 bg-amber-50 dark:bg-yellow-500/10 p-4">
-            <p className="text-sm font-semibold text-amber-900 dark:text-yellow-400 mb-1">
+            <p className="text-sm font-semibold text-amber-900 dark:text-yellow-300 mb-1">
               Verification in Progress
             </p>
-            <p className="text-sm text-amber-800 dark:text-yellow-300/80">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
               Your KYC documents are being reviewed. This usually takes 24–48 hours. Your products
               will go live once approved.
             </p>
@@ -368,7 +382,7 @@ export default function DashboardClient({
         {pendingBalance > 0 && (
           <div className="rounded-xl border border-amber-300 dark:border-yellow-500/30 bg-amber-50 dark:bg-yellow-500/10 p-4 flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-amber-900 dark:text-yellow-400">
+              <p className="text-sm font-semibold text-amber-900 dark:text-yellow-300">
                 ₦{pendingBalance.toLocaleString()} pending
               </p>
               <p className="text-xs text-amber-700 dark:text-yellow-300/80 mt-0.5">
@@ -377,7 +391,7 @@ export default function DashboardClient({
             </div>
             <button
               onClick={() => router.push("/supplier/wallet")}
-              className="text-sm font-semibold text-amber-900 dark:text-yellow-400 hover:underline whitespace-nowrap ml-4"
+              className="text-sm font-semibold text-amber-900 dark:text-yellow-300 hover:underline whitespace-nowrap ml-4"
             >
               View →
             </button>
@@ -421,11 +435,11 @@ export default function DashboardClient({
             <div className="space-y-3">
               {recentOrders.map((order) => {
                 const statusColors: Record<string, string> = {
-                  PENDING:   "bg-amber-100 dark:bg-yellow-500/10 text-amber-800 dark:text-yellow-400",
-                  CONFIRMED: "bg-blue-100 dark:bg-blue-500/10 text-blue-800 dark:text-blue-400",
-                  SHIPPED:   "bg-indigo-100 dark:bg-indigo-500/10 text-indigo-800 dark:text-indigo-400",
-                  DELIVERED: "bg-green-100 dark:bg-green-500/10 text-green-800 dark:text-green-400",
-                  CANCELLED: "bg-red-100 dark:bg-red-500/10 text-red-800 dark:text-red-400",
+                  PENDING:   "bg-amber-100 text-amber-800 dark:bg-yellow-500/10 dark:text-yellow-300",
+                  CONFIRMED: "bg-blue-100 text-blue-800 dark:bg-blue-500/10 dark:text-blue-300",
+                  SHIPPED:   "bg-indigo-100 text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-300",
+                  DELIVERED: "bg-green-100 text-green-800 dark:bg-green-500/10 dark:text-green-300",
+                  CANCELLED: "bg-red-100 text-red-800 dark:bg-red-500/10 dark:text-red-300",
                 };
                 const statusColor = statusColors[order.status] ?? "bg-muted text-muted-foreground";
                 return (
@@ -480,8 +494,8 @@ export default function DashboardClient({
                     <span className="text-primary font-semibold text-sm">₦{product.sellingPrice.toLocaleString()}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       product.isApproved
-                        ? "bg-green-100 dark:bg-green-500/10 text-green-800 dark:text-green-400"
-                        : "bg-amber-100 dark:bg-yellow-500/10 text-amber-800 dark:text-yellow-400"
+                        ? "bg-green-100 text-green-800 dark:bg-green-500/10 dark:text-green-300"
+                        : "bg-amber-100 text-amber-800 dark:bg-yellow-500/10 dark:text-yellow-300"
                     }`}>
                       {product.isApproved ? "Live" : "Pending"}
                     </span>

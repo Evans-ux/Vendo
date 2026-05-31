@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { getSupplierProducts } from "@/app/actions/supplier";
 import ProductsClient from "./ProductsClient";
 
 export default async function SupplierProductsPage() {
@@ -10,32 +9,33 @@ export default async function SupplierProductsPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/auth/login");
-  }
+  if (!user) redirect("/auth/login");
 
-  // Check user role - admins should not access supplier pages
   const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
+    where: { email: user.email! },
+    include: { supplier: true },
   });
 
-  if (dbUser?.role === "ADMIN") {
-    redirect("/admin/dashboard");
-  }
+  if (dbUser?.role === "ADMIN") redirect("/admin/dashboard");
+  if (!dbUser?.supplier) redirect("/supplier/onboard");
 
-  const result = await getSupplierProducts();
+  const supplierId = dbUser.supplier.id;
 
-  if (!result.success) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center">
-          <p className="text-destructive">{result.error}</p>
-        </div>
-      </div>
-    );
-  }
+  // Fetch products with order count and pending delete request status
+  const rawProducts = await prisma.product.findMany({
+    where: { supplierId, isDeleted: false },
+    include: {
+      _count: { select: { orderItems: true } },
+      deleteRequests: {
+        where: { status: "PENDING" },
+        select: { id: true },
+        take: 1,
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
-  const products = result.products!.map((p: any) => ({
+  const products = rawProducts.map((p) => ({
     id: p.id,
     name: p.name,
     description: p.description,
@@ -49,6 +49,8 @@ export default async function SupplierProductsPage() {
     deliveryMethod: p.deliveryMethod as "SELF_DELIVERY" | "PLATFORM_LOGISTICS" | "DROPSHIP_HANDLED",
     logisticsFee: p.logisticsFee ? Number(p.logisticsFee) : null,
     createdAt: p.createdAt.toISOString(),
+    hasOrders: p._count.orderItems > 0,
+    hasPendingDeleteRequest: p.deleteRequests.length > 0,
   }));
 
   return <ProductsClient products={products} />;

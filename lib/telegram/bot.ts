@@ -62,7 +62,15 @@ function pushHistory(id: string, msg: ChatMessage) {
 
 // ─── Checkout State ───────────────────────────────────────────────────────────
 
-interface CheckoutState { productId: string; step: "phone" | "address" | "confirm"; phone?: string; address?: string }
+interface CheckoutState {
+  productId: string;
+  step: "size" | "phone" | "address" | "landmark" | "confirm";
+  size?: string;
+  phone?: string;
+  address?: string;
+  landmark?: string;
+  availableSizes?: string[];
+}
 const checkoutState = new Map<string, CheckoutState>();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -493,15 +501,61 @@ function createBot(): Telegraf {
         where: { id: productId },
         include: { supplier: { select: { businessName: true, supplierType: true } } },
       });
-      if (!product || !product.isApproved || !product.isActive || product.stock < 1) {
+      if (!product || !product.isApproved || !product.isActive || product.isDeleted || product.stock < 1) {
         await ctx.reply("❌ Sorry, that product is no longer available.");
         return;
       }
-      checkoutState.set(telegramId, { productId, step: "phone" });
+
+      // Parse available sizes
+      let availableSizes: string[] = [];
+      if (product.sizes && typeof product.sizes === "object") {
+        availableSizes = (product.sizes as any).available ?? [];
+      }
+
+      const deliveryTime = product.supplier.supplierType === "LOCAL" ? "2-3 business days" : "14-21 business days";
+      const header = `🛍️ *${product.name}*\n💰 ₦${Number(product.sellingPrice).toLocaleString()}\n🏪 ${product.supplier.businessName}\n🚚 ${deliveryTime}\n\n`;
+
+      if (availableSizes.length > 0) {
+        // Ask for size first
+        checkoutState.set(telegramId, { productId, step: "size", availableSizes });
+        const sizeButtons = availableSizes.map(s => [{ text: s, callback_data: `size:${s}` }]);
+        sizeButtons.push([{ text: "❌ Cancel", callback_data: "checkout_cancel" }]);
+        await ctx.reply(
+          header + `📏 *Select your size:*`,
+          { parse_mode: "Markdown", reply_markup: { inline_keyboard: sizeButtons } }
+        );
+      } else {
+        // No sizes — go straight to phone
+        checkoutState.set(telegramId, { productId, step: "phone" });
+        await ctx.reply(
+          header + `📱 *What's your phone number?*\n_(e.g. 08012345678)_\n\n_Type CANCEL at any time to stop._`,
+          { parse_mode: "Markdown" }
+        );
+      }
+      return;
+    }
+
+    // Size selection during checkout
+    if (data.startsWith("size:")) {
+      const size = data.replace("size:", "");
+      const telegramId = String(ctx.from.id);
+      const pending = checkoutState.get(telegramId);
+      if (!pending || pending.step !== "size") { await ctx.answerCbQuery(); return; }
+      await ctx.answerCbQuery(`Size ${size} selected ✅`);
+      checkoutState.set(telegramId, { ...pending, size, step: "phone" });
       await ctx.reply(
-        `🛍️ *${product.name}*\n💰 ₦${Number(product.sellingPrice).toLocaleString()}\n🏪 ${product.supplier.businessName}\n🚚 ${product.supplier.supplierType === "LOCAL" ? "2-3 business days" : "14-21 business days"}\n\n📱 *What's your phone number?*\n_(e.g. 08012345678)_`,
+        `✅ Size *${size}* selected!\n\n📱 *What's your phone number?*\n_(e.g. 08012345678)_\n\n_Type CANCEL at any time to stop._`,
         { parse_mode: "Markdown" }
       );
+      return;
+    }
+
+    // Cancel checkout
+    if (data === "checkout_cancel") {
+      const telegramId = String(ctx.from.id);
+      checkoutState.delete(telegramId);
+      await ctx.answerCbQuery("Order cancelled");
+      await ctx.reply("❌ Order cancelled. No problem — just tell me what you're looking for! 😊");
       return;
     }
 
@@ -534,29 +588,50 @@ function createBot(): Telegraf {
   bot.on(message("text"), async (ctx) => {
     const userMessage = ctx.message.text;
     const telegramId = String(ctx.from.id);
+    const lowerMsg = userMessage.toLowerCase().trim();
 
-    // Checkout state machine
+    // ── CANCEL escape — works at any checkout step ────────────────────────
     const pending = checkoutState.get(telegramId);
+    if (pending && /^(cancel|stop|quit|exit|back|no thanks|nevermind|never mind)$/i.test(lowerMsg)) {
+      checkoutState.delete(telegramId);
+      await ctx.reply("❌ Order cancelled. No problem — just tell me what you're looking for! 😊");
+      return;
+    }
+
+    // ── Checkout state machine ────────────────────────────────────────────
+    const cancelHint = "\n\n_Type CANCEL at any time to stop._";
     if (pending) {
       if (pending.step === "phone") {
         const phone = userMessage.trim().replace(/\s/g, "");
         if (!/^(\+234|0)[789][01]\d{8}$/.test(phone)) {
-          await ctx.reply("❌ Invalid Nigerian phone number. Try: 08012345678 or +2348012345678");
+          await ctx.reply("❌ Invalid Nigerian number. Try: *08012345678* or *+2348012345678*" + cancelHint, { parse_mode: "Markdown" });
           return;
         }
         checkoutState.set(telegramId, { ...pending, phone, step: "address" });
-        await ctx.reply("📍 *Delivery Address*\n\nPlease type your full delivery address:\n_Example: 12 Awka Road, Onitsha, Anambra_", { parse_mode: "Markdown" });
+        await ctx.reply("📍 *Delivery Address*\n\nType your full street address:\n_Example: 12 Awka Road, Onitsha, Anambra_" + cancelHint, { parse_mode: "Markdown" });
         return;
       }
       if (pending.step === "address") {
         const address = userMessage.trim();
-        if (address.length < 10) { await ctx.reply("Please enter a more complete address (street, city, state):"); return; }
-        checkoutState.set(telegramId, { ...pending, address, step: "confirm" });
+        if (address.length < 8) { await ctx.reply("Please enter a more complete address (street, city, state):" + cancelHint, { parse_mode: "Markdown" }); return; }
+        checkoutState.set(telegramId, { ...pending, address, step: "landmark" });
+        await ctx.reply(
+          "🏪 *Nearest Landmark or Bus Stop*\n\nThis helps the courier find you faster.\n_Example: Beside GTBank, Onitsha Bridge bus stop_\n\nOr type *SKIP* if none." + cancelHint,
+          { parse_mode: "Markdown" }
+        );
+        return;
+      }
+      if (pending.step === "landmark") {
+        const landmark = /^skip$/i.test(userMessage.trim()) ? "" : userMessage.trim();
+        checkoutState.set(telegramId, { ...pending, landmark, step: "confirm" });
         const { prisma } = await import("@/lib/prisma");
         const product = await prisma.product.findUnique({ where: { id: pending.productId }, include: { supplier: { select: { businessName: true } } } });
         if (!product) { checkoutState.delete(telegramId); await ctx.reply("❌ Product no longer available."); return; }
+        const addrLine = landmark ? `${pending.address}\n   📌 Landmark: ${landmark}` : pending.address!;
         await ctx.reply(
-          `📋 *Order Summary*\n\n🛍️ *${product.name}*\n💰 ₦${Number(product.sellingPrice).toLocaleString()}\n🏪 ${product.supplier.businessName}\n📱 ${pending.phone}\n📍 ${address}\n\nReply *YES* to confirm or *NO* to cancel.`,
+          `📋 *Order Summary*\n\n🛍️ *${product.name}*\n💰 ₦${Number(product.sellingPrice).toLocaleString()}\n🏪 ${product.supplier.businessName}\n` +
+          (pending.size ? `📏 Size: ${pending.size}\n` : "") +
+          `📱 ${pending.phone}\n📍 ${addrLine}\n\nReply *YES* to confirm or *NO* to cancel.`,
           { parse_mode: "Markdown" }
         );
         return;
@@ -572,11 +647,16 @@ function createBot(): Telegraf {
           checkoutState.delete(telegramId);
           await ctx.reply("⏳ Creating your order...");
           try {
-            const order = await createOrder(telegramId, pending.productId, pending.phone, pending.address);
+            const fullAddress = pending.landmark
+              ? `${pending.address} (Landmark: ${pending.landmark})`
+              : pending.address;
+            const order = await createOrder(telegramId, pending.productId, pending.phone, fullAddress, pending.size);
             const paymentLink = await generatePaymentLink(order.id);
             const productName = (order as any).items[0]?.product?.name ?? "Item";
             await ctx.reply(
-              `✅ *Order Created!*\n\nOrder: *#${(order as any).orderNumber}*\nItem: *${productName}*\nTotal: *₦${Number(order.totalAmount).toLocaleString()}*\n\n💳 *Tap below to pay securely:*\n${paymentLink}\n\n⏰ Link expires in 30 minutes.`,
+              `✅ *Order Created!*\n\nOrder: *#${(order as any).orderNumber}*\nItem: *${productName}*\n` +
+              (pending.size ? `Size: *${pending.size}*\n` : "") +
+              `Total: *₦${Number(order.totalAmount).toLocaleString()}*\n\n💳 *Tap below to pay securely:*\n${paymentLink}\n\n⏰ Link expires in 30 minutes.`,
               { parse_mode: "Markdown" }
             );
           } catch (e: any) {
@@ -736,37 +816,31 @@ function createBot(): Telegraf {
       return;
     }
 
-    // Regular AI chat with smart product search
+    // ── Conversational AI with smart product search ───────────────────────
     try {
       await withTyping(ctx, "typing", async () => {
-        const lowerMsg = userMessage.toLowerCase();
-        const isLikelyProductQuery = /\b(show|find|want|need|looking|buy|order|price|cheap|sneaker|shoe|shirt|dress|bag|trouser|jean|jacket|cap|watch|ring|necklace|ankara|agbada|kaftan|under|below|above|₦|naira|have|available|stock|catalog|sell|product|products|item|items|store|shop|stuff|wear|clothe|clothes|anything|something)\b/.test(lowerMsg);
+        // Use Groq to determine intent — is this a product query or general chat?
+        // This is the key fix: AI decides, not a brittle keyword regex.
+        const aiParams = await aiExtractSearchParams(userMessage);
+        const isProductQuery = aiParams?.isProductQuery ?? false;
 
-        // Run user lookup and smart product search in parallel
         const [user, products] = await Promise.all([
           getOrCreateUser(telegramId, ctx.from.first_name, ctx.from.last_name),
-          isLikelyProductQuery
-            ? (async () => {
-                const aiParams = await aiExtractSearchParams(userMessage);
-                const params = aiParams ?? extractSearchParams(userMessage);
-                if (!params.isProductQuery) return [];
-                return searchProductsByParams(params, 5);
-              })()
-            : Promise.resolve([]),
+          isProductQuery ? searchProductsByParams(aiParams!, 5) : Promise.resolve([]),
         ]);
 
-        const catalog = formatProductsForAI(products as any);
+        const catalog = isProductQuery
+          ? formatProductsForAI(products as any)
+          : "[CATALOG: Not searched — this is a general conversation]";
         const profile = formatUserProfileForAI(user);
         const reply = await chatWithAI(telegramId, userMessage, `${catalog}\n\n${profile}`);
-        console.log(`[Bot] Reply for ${telegramId}: ${reply.substring(0, 80)}...`);
-
         await ctx.reply(truncate(sanitizeMarkdown(reply)), { parse_mode: "Markdown" });
 
-        // Only send product photo if AI actually mentioned the product
+        // Attach product photo only if AI mentioned the product by name
         if (
+          isProductQuery &&
           (products as any[]).length > 0 &&
-          (products as any[])[0].imageUrls[0] &&
-          isLikelyProductQuery &&
+          (products as any[])[0].imageUrls?.[0] &&
           reply.toLowerCase().includes((products as any[])[0].name.toLowerCase().slice(0, 8))
         ) {
           try {

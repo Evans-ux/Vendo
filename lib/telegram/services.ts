@@ -149,7 +149,9 @@ export async function smartSearchProducts(
     where: {
       isApproved: true,
       isActive: true,
+      isDeleted: false,
       stock: { gt: 0 },
+      supplier: { isActive: true, kycStatus: "APPROVED" },
       ...priceFilter,
       ...termFilter,
     },
@@ -167,7 +169,9 @@ export async function smartSearchProducts(
       where: {
         isApproved: true,
         isActive: true,
+        isDeleted: false,
         stock: { gt: 0 },
+        supplier: { isActive: true, kycStatus: "APPROVED" },
         ...categoryFilter,
       },
       take: limit,
@@ -184,6 +188,7 @@ export async function smartSearchProducts(
   const pass3 = await prisma.product.findMany({
     where: {
       isActive: true,
+      isDeleted: false,
       supplier: { isActive: true },
       ...termFilter,
     },
@@ -306,7 +311,8 @@ export async function createOrder(
   telegramId: string,
   productId: string,
   phone?: string,
-  address?: string
+  address?: string,
+  size?: string
 ) {
   const user = await getOrCreateUser(telegramId);
   const product = await prisma.product.findUnique({
@@ -314,7 +320,7 @@ export async function createOrder(
     include: { supplier: true },
   });
   if (!product) throw new Error("Product not found");
-  if (!product.isApproved || !product.isActive) throw new Error("Product is not available");
+  if (!product.isApproved || !product.isActive || (product as any).isDeleted) throw new Error("Product is not available");
   if (product.stock < 1) throw new Error("Product is out of stock");
 
   // Generate a human-readable order number
@@ -335,7 +341,12 @@ export async function createOrder(
       paymentStatus: "UNPAID",
       deliveryAddress: address || null,
       items: {
-        create: { productId: product.id, quantity: 1, unitPrice: product.sellingPrice },
+        create: {
+          productId: product.id,
+          quantity: 1,
+          unitPrice: product.sellingPrice,
+          size: size || null,
+        },
       },
     },
     include: {

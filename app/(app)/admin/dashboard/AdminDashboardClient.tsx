@@ -118,7 +118,21 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
       icon: "✓",
       link: "/admin/subaccounts",
       color: "white",
-    }
+    },
+    {
+      title: "Notifications",
+      description: "Send messages to suppliers",
+      icon: "🔔",
+      link: "/admin/notifications",
+      color: "blue",
+    },
+    {
+      title: "Delete Requests",
+      description: "Review supplier product removal requests",
+      icon: "🗑️",
+      link: "/admin/delete-requests",
+      color: "orange",
+    },
   ];
 
   return (
@@ -256,13 +270,15 @@ export default function AdminDashboardClient({ stats }: { stats: Stats }) {
           <h2 className="text-xl font-bold text-foreground mb-4">Management</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
-              { label: "Suppliers", link: "/admin/suppliers", icon: "👥" },
-              { label: "KYC Verification", link: "/admin/kyc", icon: "📋" },
-              { label: "Orders", link: "/admin/orders", icon: "🛒" },
-              { label: "Products", link: "/admin/products", icon: "📦" },
-              { label: "Customers", link: "/admin/customers", icon: "👤" },
-              { label: "Reports", link: "/admin/reports", icon: "📊" },
-              { label: "Settings", link: "/admin/settings", icon: "⚙️" },
+              { label: "Suppliers",        link: "/admin/suppliers",       icon: "👥" },
+              { label: "KYC Verification", link: "/admin/kyc",             icon: "📋" },
+              { label: "Orders",           link: "/admin/orders",          icon: "🛒" },
+              { label: "Products",         link: "/admin/products",        icon: "📦" },
+              { label: "Customers",        link: "/admin/customers",       icon: "👤" },
+              { label: "Reports",          link: "/admin/reports",         icon: "📊" },
+              { label: "Notifications",    link: "/admin/notifications",   icon: "🔔" },
+              { label: "Delete Requests",  link: "/admin/delete-requests", icon: "🗑️" },
+              { label: "Settings",         link: "/admin/settings",        icon: "⚙️" },
             ].map((item) => (
               <button
                 key={item.label}

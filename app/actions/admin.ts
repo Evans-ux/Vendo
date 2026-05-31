@@ -228,7 +228,7 @@ export async function getAllOrders(filters?: { status?: string }) {
     const orders = await prisma.order.findMany({
       where: { ...(filters?.status && { status: filters.status as any }) },
       include: {
-        user: { select: { name: true, email: true } },
+        user: { select: { name: true, email: true, telegramId: true } },
         items: {
           include: {
             product: {
@@ -245,6 +245,129 @@ export async function getAllOrders(filters?: { status?: string }) {
   } catch (error) {
     console.error('Error fetching orders:', error)
     return { success: false, error: 'Failed to fetch orders' }
+  }
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+async function assertAdmin() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: 'Unauthorized' }
+  const dbUser = await prisma.user.findUnique({ where: { id: user.id } })
+  if (!dbUser || dbUser.role !== 'ADMIN') return { ok: false as const, error: 'Forbidden' }
+  return { ok: true as const }
+}
+
+async function flwRefundByTxRef(txRef: string): Promise<{ ok: boolean; error?: string }> {
+  const { FLW_SECRET_KEY } = await import('@/lib/flutterwave')
+  const searchRes = await fetch(
+    `https://api.flutterwave.com/v3/transactions?tx_ref=${encodeURIComponent(txRef)}`,
+    { headers: { Authorization: `Bearer ${FLW_SECRET_KEY}` } }
+  )
+  const searchJson = await searchRes.json()
+  const flwTx = searchJson?.data?.[0]
+  if (!flwTx?.id) {
+    return { ok: false, error: 'Flutterwave transaction not found. Refund manually from the FLW dashboard.' }
+  }
+  const { initiateRefund } = await import('@/lib/flutterwave')
+  await initiateRefund(String(flwTx.id))
+  return { ok: true }
+}
+
+/**
+ * Admin: cancel an UNPAID/PENDING order and restore stock.
+ */
+export async function cancelOrder(orderId: string) {
+  try {
+    const auth = await assertAdmin()
+    if (!auth.ok) return { success: false, error: auth.error }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: { select: { telegramId: true } },
+        items: { select: { productId: true, quantity: true } },
+      },
+    })
+    if (!order) return { success: false, error: 'Order not found' }
+    if (order.status === 'CANCELLED') return { success: false, error: 'Already cancelled' }
+    if (order.paymentStatus === 'PAID') {
+      return { success: false, error: 'Order is paid — use Refund & Cancel instead.' }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({ where: { id: orderId }, data: { status: 'CANCELLED' } })
+      for (const item of order.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        })
+      }
+    })
+
+    await notifyTelegram(
+      order.user.telegramId,
+      `❌ *Order Cancelled*\n\nYour order *#${order.orderNumber}* has been cancelled by the platform.\n\nNo payment was taken. Contact support if you have questions.`
+    )
+
+    revalidatePath('/admin/orders')
+    return { success: true, message: `Order #${order.orderNumber} cancelled.` }
+  } catch (error) {
+    console.error('cancelOrder error:', error)
+    return { success: false, error: 'Failed to cancel order' }
+  }
+}
+
+/**
+ * Admin: refund a PAID order via Flutterwave, mark CANCELLED + REFUNDED, restore stock.
+ */
+export async function refundOrder(orderId: string) {
+  try {
+    const auth = await assertAdmin()
+    if (!auth.ok) return { success: false, error: auth.error }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: { select: { telegramId: true } },
+        items: { select: { productId: true, quantity: true } },
+      },
+    })
+    if (!order) return { success: false, error: 'Order not found' }
+    if (order.paymentStatus !== 'PAID') {
+      return { success: false, error: 'Order has not been paid — use Cancel instead.' }
+    }
+    if (order.status === 'CANCELLED') return { success: false, error: 'Already cancelled.' }
+    if (order.status === 'DELIVERED') return { success: false, error: 'Cannot refund a delivered order.' }
+    if (!order.paymentRef) return { success: false, error: 'No payment reference on this order.' }
+
+    const refund = await flwRefundByTxRef(order.paymentRef)
+    if (!refund.ok) return { success: false, error: refund.error }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: 'CANCELLED', paymentStatus: 'REFUNDED' },
+      })
+      for (const item of order.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        })
+      }
+    })
+
+    await notifyTelegram(
+      order.user.telegramId,
+      `💸 *Refund Initiated*\n\nYour payment for order *#${order.orderNumber}* has been refunded.\n\nThe amount will be returned to your original payment method within 3–5 business days.`
+    )
+
+    revalidatePath('/admin/orders')
+    return { success: true, message: `Order #${order.orderNumber} refunded and cancelled.` }
+  } catch (error: any) {
+    console.error('refundOrder error:', error)
+    return { success: false, error: error.message || 'Failed to refund order' }
   }
 }
 
@@ -371,6 +494,168 @@ export async function getAdminStats(): Promise<{ success: true; stats: AdminStat
   } catch (error) {
     console.error('Error fetching admin stats:', error)
     return { success: false, error: 'Failed to fetch stats' }
+  }
+}
+
+// ============================================
+// NOTIFICATIONS (Admin → Suppliers)
+// ============================================
+
+/**
+ * Send a notification to a specific supplier or broadcast to all.
+ */
+export async function sendNotification(data: {
+  title: string
+  message: string
+  supplierId?: string // omit for broadcast
+}) {
+  try {
+    const auth = await assertAdmin()
+    if (!auth.ok) return { success: false, error: auth.error }
+
+    if (!data.title?.trim() || !data.message?.trim()) {
+      return { success: false, error: 'Title and message are required.' }
+    }
+
+    await prisma.notification.create({
+      data: {
+        title: data.title.trim(),
+        message: data.message.trim(),
+        supplierId: data.supplierId ?? null,
+        target: data.supplierId ? 'SUPPLIER' : 'ALL',
+        hasRead: false,
+      },
+    })
+
+    revalidatePath('/admin/notifications')
+    return { success: true, message: data.supplierId ? 'Notification sent.' : 'Broadcast sent to all suppliers.' }
+  } catch (error) {
+    console.error('sendNotification error:', error)
+    return { success: false, error: 'Failed to send notification' }
+  }
+}
+
+export async function getAdminNotifications() {
+  try {
+    const notifications = await prisma.notification.findMany({
+      include: { supplier: { select: { businessName: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    })
+    return { success: true, notifications }
+  } catch (error) {
+    console.error('getAdminNotifications error:', error)
+    return { success: false, error: 'Failed to fetch notifications' }
+  }
+}
+
+// ============================================
+// DELETE REQUESTS (Admin review)
+// ============================================
+
+export async function getDeleteRequests(status?: 'PENDING' | 'APPROVED' | 'REJECTED') {
+  try {
+    const requests = await prisma.deleteRequest.findMany({
+      where: status ? { status } : undefined,
+      include: {
+        product: { select: { name: true, imageUrls: true, isDeleted: true } },
+        supplier: { select: { businessName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    return { success: true, requests }
+  } catch (error) {
+    console.error('getDeleteRequests error:', error)
+    return { success: false, error: 'Failed to fetch delete requests' }
+  }
+}
+
+export async function approveDeleteRequest(requestId: string) {
+  try {
+    const auth = await assertAdmin()
+    if (!auth.ok) return { success: false, error: auth.error }
+
+    const req = await prisma.deleteRequest.findUnique({
+      where: { id: requestId },
+      include: { supplier: { include: { user: { select: { telegramId: true } } } } },
+    })
+    if (!req) return { success: false, error: 'Request not found' }
+    if (req.status !== 'PENDING') return { success: false, error: 'Request already reviewed' }
+
+    await prisma.$transaction(async (tx) => {
+      // Soft-delete the product
+      await tx.product.update({
+        where: { id: req.productId },
+        data: { isDeleted: true, isActive: false, isApproved: false },
+      })
+      // Mark request approved
+      await tx.deleteRequest.update({
+        where: { id: requestId },
+        data: { status: 'APPROVED', reviewedAt: new Date() },
+      })
+      // Notify supplier
+      await tx.notification.create({
+        data: {
+          supplierId: req.supplierId,
+          target: 'SUPPLIER',
+          title: 'Delete Request Approved',
+          message: `Your request to remove a product has been approved. The product has been taken off the store.`,
+        },
+      })
+    })
+
+    await notifyTelegram(
+      req.supplier.user.telegramId,
+      `✅ *Delete Request Approved*\n\nYour product removal request has been approved. The product has been taken off the store.`
+    )
+
+    revalidatePath('/admin/delete-requests')
+    return { success: true, message: 'Delete request approved and product removed.' }
+  } catch (error) {
+    console.error('approveDeleteRequest error:', error)
+    return { success: false, error: 'Failed to approve request' }
+  }
+}
+
+export async function rejectDeleteRequest(requestId: string, adminNote: string) {
+  try {
+    const auth = await assertAdmin()
+    if (!auth.ok) return { success: false, error: auth.error }
+
+    if (!adminNote?.trim()) return { success: false, error: 'A rejection reason is required.' }
+
+    const req = await prisma.deleteRequest.findUnique({
+      where: { id: requestId },
+      include: { supplier: { include: { user: { select: { telegramId: true } } } } },
+    })
+    if (!req) return { success: false, error: 'Request not found' }
+    if (req.status !== 'PENDING') return { success: false, error: 'Request already reviewed' }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.deleteRequest.update({
+        where: { id: requestId },
+        data: { status: 'REJECTED', adminNote: adminNote.trim(), reviewedAt: new Date() },
+      })
+      await tx.notification.create({
+        data: {
+          supplierId: req.supplierId,
+          target: 'SUPPLIER',
+          title: 'Delete Request Rejected',
+          message: `Your product removal request was not approved.\n\nReason: ${adminNote.trim()}`,
+        },
+      })
+    })
+
+    await notifyTelegram(
+      req.supplier.user.telegramId,
+      `❌ *Delete Request Rejected*\n\nYour product removal request was not approved.\n\n*Reason:* ${adminNote.trim()}`
+    )
+
+    revalidatePath('/admin/delete-requests')
+    return { success: true, message: 'Delete request rejected.' }
+  } catch (error) {
+    console.error('rejectDeleteRequest error:', error)
+    return { success: false, error: 'Failed to reject request' }
   }
 }
 

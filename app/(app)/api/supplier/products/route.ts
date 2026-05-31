@@ -34,7 +34,11 @@ export async function POST(request: NextRequest) {
       );
     }
     const body = await request.json();
-    const { name, description, category, basePrice, stock, sizes, imageUrls, deliveryMethod } = body;
+    const {
+      name, description, category, basePrice, stock, sizes, imageUrls, deliveryMethod,
+      // Pickup address — save to supplier profile if provided
+      pickupAddress, pickupCity, pickupState, pickupPostCode, pickupPhone,
+    } = body;
 
     if (!name || !basePrice || !stock || !imageUrls || imageUrls.length === 0 || !deliveryMethod) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
@@ -49,19 +53,13 @@ export async function POST(request: NextRequest) {
     // Selling price = base price + 10% markup, rounded to 2dp
     const sellingPrice = Math.round(basePrice * 1.10 * 100) / 100;
 
-    // Calculate logistics fee based on category for PLATFORM_LOGISTICS
-    let logisticsFee = null;
-    if (deliveryMethod === "PLATFORM_LOGISTICS") {
+    // Use the logistics fee passed from the client (already fetched from Sendbox)
+    // Fall back to static fees only if not provided
+    let logisticsFee = body.logisticsFee ?? null;
+    if (deliveryMethod === "PLATFORM_LOGISTICS" && !logisticsFee) {
       const fees: Record<string, number> = {
-        'Accessories': 800,
-        'Footwear': 1500,
-        'Clothing': 1200,
-        'Tops': 1200,
-        'Bottoms': 1200,
-        'Dresses': 1200,
-        'Bags': 2000,
-        'Jewelry': 800,
-        'Other': 1500,
+        Accessories: 800, Footwear: 1500, Tops: 1200, Bottoms: 1200,
+        Dresses: 1200, Bags: 2000, Jewelry: 800, Other: 1500,
       };
       logisticsFee = fees[category] || 1500;
     }
@@ -79,15 +77,26 @@ export async function POST(request: NextRequest) {
         stock,
         deliveryMethod,
         logisticsFee,
-        isApproved: false,  // approved in bulk when admin approves the supplier's KYC
+        isApproved: false,
         isActive: true,
       },
     });
 
-    // Mark onboarding as complete after first product
+    // Save pickup address to supplier profile if provided (for Sendbox shipments)
+    const pickupUpdate: Record<string, string> = {};
+    if (pickupAddress) pickupUpdate.pickupAddress = pickupAddress;
+    if (pickupCity)    pickupUpdate.pickupCity    = pickupCity;
+    if (pickupState)   pickupUpdate.pickupState   = pickupState;
+    if (pickupPostCode) pickupUpdate.pickupPostCode = pickupPostCode;
+    if (pickupPhone)   pickupUpdate.pickupPhone   = pickupPhone;
+
+    // Mark onboarding step + optionally save pickup address
     await prisma.supplier.update({
       where: { id: dbUser.supplier.id },
-      data: { onboardingStep: "FIRST_PRODUCT" },
+      data: {
+        onboardingStep: "FIRST_PRODUCT",
+        ...(Object.keys(pickupUpdate).length > 0 ? pickupUpdate : {}),
+      },
     });
 
     return NextResponse.json({ message: "Product created successfully", product });

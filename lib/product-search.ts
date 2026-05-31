@@ -284,6 +284,7 @@ export async function searchProducts(
         },
         isApproved: true,
         isActive: true,
+        isDeleted: false,
         name: {
           contains: query,
           mode: "insensitive",

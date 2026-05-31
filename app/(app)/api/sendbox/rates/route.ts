@@ -15,13 +15,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 
-const SENDBOX_BASE = 'https://api.sendbox.co'
+const SENDBOX_BASE = 'https://live.sendbox.co'
 
 async function sendboxRequest(path: string, options: RequestInit = {}) {
   const res = await fetch(`${SENDBOX_BASE}${path}`, {
     ...options,
     headers: {
-      'Authorization': `Bearer ${process.env.SENDBOX_API_KEY}`,
+      // Sendbox auth: raw token, no "Bearer" prefix — per docs
+      'Authorization': process.env.SENDBOX_API_KEY ?? '',
       'Content-Type': 'application/json',
       ...options.headers,
     },

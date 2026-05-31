@@ -30,6 +30,11 @@ export default async function SettingsPage() {
       accountNumber={s.accountNumber}
       accountHolderName={s.accountHolderName}
       hasPin={!!s.withdrawalPin}
+      pickupAddress={s.pickupAddress}
+      pickupCity={s.pickupCity}
+      pickupState={s.pickupState}
+      pickupPostCode={s.pickupPostCode}
+      pickupPhone={s.pickupPhone}
     />
   );
 }

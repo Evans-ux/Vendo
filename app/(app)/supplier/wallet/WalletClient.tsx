@@ -269,7 +269,7 @@ export default function WalletClient({
           {/* Pending */}
           <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
-              <Clock className="w-5 h-5 text-yellow-500" />
+              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               <span className="text-sm font-medium text-muted-foreground">Pending</span>
             </div>
             <p className="text-2xl font-bold text-foreground">₦{pendingBalance.toLocaleString()}</p>
@@ -289,11 +289,11 @@ export default function WalletClient({
 
         {/* Withdraw CTA */}
         {!hasPin && (
-          <div className="rounded-xl border border-amber-300 dark:border-yellow-500/30 bg-amber-50 dark:bg-yellow-500/10 p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-700 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div className="rounded-xl border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-700 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-amber-900 dark:text-yellow-300">Set a withdrawal PIN first</p>
-              <p className="text-sm text-amber-800 dark:text-yellow-300/80 mt-0.5">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Set a withdrawal PIN first</p>
+              <p className="text-sm text-amber-800 dark:text-amber-300 mt-0.5">
                 You need a 4-digit PIN to withdraw funds.{" "}
                 <button
                   onClick={() => router.push("/supplier/settings")}
@@ -307,11 +307,11 @@ export default function WalletClient({
         )}
 
         {hasPin && !bankName && (
-          <div className="rounded-xl border border-amber-300 dark:border-yellow-500/30 bg-amber-50 dark:bg-yellow-500/10 p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-700 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div className="rounded-xl border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-700 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-amber-900 dark:text-yellow-300">Bank account not set</p>
-              <p className="text-sm text-amber-800 dark:text-yellow-300/80 mt-0.5">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Bank account not set</p>
+              <p className="text-sm text-amber-800 dark:text-amber-300 mt-0.5">
                 Add your bank account in{" "}
                 <button onClick={() => router.push("/supplier/settings")} className="underline font-semibold">
                   Settings →
@@ -394,7 +394,7 @@ export default function WalletClient({
                       })}
                     </p>
                     {t.status === "PENDING" && t.availableAt && (
-                      <p className="text-xs text-amber-700 dark:text-yellow-400 mt-0.5">
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                         Available {new Date(t.availableAt).toLocaleTimeString("en-NG", {
                           hour: "2-digit", minute: "2-digit",
                         })} · {new Date(t.availableAt).toLocaleDateString("en-NG", { day: "numeric", month: "short" })}

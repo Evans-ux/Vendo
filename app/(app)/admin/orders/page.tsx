@@ -48,9 +48,12 @@ export default async function AdminOrdersPage({
     status: order.status,
     paymentStatus: order.paymentStatus,
     totalAmount: Number(order.totalAmount),
-    shippingAddress: order.shippingAddress,
+    deliveryAddress: order.deliveryAddress ?? "Not provided",
     createdAt: order.createdAt.toISOString(),
-    user: order.user,
+    user: {
+      name: order.user.name,
+      email: order.user.email,
+    },
     items: order.items.map((item: any) => ({
       id: item.id,
       quantity: item.quantity,

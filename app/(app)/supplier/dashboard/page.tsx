@@ -49,6 +49,14 @@ export default async function SupplierDashboardPage() {
     _sum: { amount: true },
   });
 
+  // Unread notifications count
+  const unreadNotifications = await prisma.notification.count({
+    where: {
+      OR: [{ supplierId: s.id }, { target: "ALL" }],
+      hasRead: false,
+    },
+  });
+
   // Recent orders for this supplier (shown directly on dashboard)
   const recentOrders = await prisma.order.findMany({
     where: {
@@ -131,5 +139,6 @@ export default async function SupplierDashboardPage() {
         quantity: item.quantity,
       })),
     }))}
+    unreadNotifications={unreadNotifications}
   />;
 }

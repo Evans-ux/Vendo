@@ -102,11 +102,17 @@ export async function POST(request: NextRequest) {
         deliveryMethod: true,
         logisticsFee: true,
         sizes: true,
+        isActive: true,
+        isDeleted: true,
       },
     });
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
+    if (product.isDeleted || !product.isActive) {
+      return NextResponse.json({ error: "This product is no longer available" }, { status: 410 });
     }
 
     // Check stock

@@ -46,7 +46,7 @@ export default async function SupplierOrdersPage({
     status: order.status,
     paymentStatus: order.paymentStatus,
     totalAmount: Number(order.totalAmount),
-    shippingAddress: order.shippingAddress,
+    deliveryAddress: order.deliveryAddress ?? "Not provided",
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
     user: order.user,
@@ -54,6 +54,7 @@ export default async function SupplierOrdersPage({
       id: item.id,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
+      size: item.size ?? null,
       product: {
         id: item.product.id,
         name: item.product.name,

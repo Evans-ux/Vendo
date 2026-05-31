@@ -23,6 +23,11 @@ interface SettingsClientProps {
   accountNumber: string | null;
   accountHolderName: string | null;
   hasPin: boolean;
+  pickupAddress?: string | null;
+  pickupCity?: string | null;
+  pickupState?: string | null;
+  pickupPostCode?: string | null;
+  pickupPhone?: string | null;
 }
 
 type Tab = "profile" | "bank" | "pin";
@@ -65,13 +70,29 @@ function PinField({
 export default function SettingsClient({
   businessName, phone, state, bio,
   bankName, bankCode, accountNumber, accountHolderName, hasPin,
+  pickupAddress, pickupCity, pickupState, pickupPostCode, pickupPhone,
 }: SettingsClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("profile");
 
   // ── Profile state ──
-  const [profileForm, setProfileForm] = useState({ businessName, phone, state: state ?? "", bio: bio ?? "" });
+  const [profileForm, setProfileForm] = useState({
+    businessName,
+    phone,
+    state: state ?? "",
+    bio: bio ?? "",
+  });
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // ── Pickup address state ──
+  const [pickupForm, setPickupForm] = useState({
+    pickupAddress:  pickupAddress  ?? "",
+    pickupCity:     pickupCity     ?? "",
+    pickupState:    pickupState    ?? "",
+    pickupPostCode: pickupPostCode ?? "",
+    pickupPhone:    pickupPhone    ?? "",
+  });
+  const [savingPickup, setSavingPickup] = useState(false);
 
   // ── Bank state ──
   const [banks, setBanks] = useState<Bank[]>([]);
@@ -87,10 +108,16 @@ export default function SettingsClient({
   const [savingBank, setSavingBank] = useState(false);
 
   // ── PIN state ──
-  const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [savingPin, setSavingPin] = useState(false);
+
+  // ── OTP state (for PIN change) ──
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [maskedEmail, setMaskedEmail] = useState("");
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0); // seconds remaining
 
   // Load banks
   useEffect(() => {
@@ -153,6 +180,22 @@ export default function SettingsClient({
     finally { setSavingProfile(false); }
   };
 
+  const handleSavePickup = async () => {
+    setSavingPickup(true);
+    try {
+      const res = await fetch("/api/supplier/settings/pickup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pickupForm),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.message || "Failed to save pickup address"); return; }
+      toast.success("Pickup address saved");
+      router.refresh();
+    } catch { toast.error("Network error"); }
+    finally { setSavingPickup(false); }
+  };
+
   const handleSaveBank = async () => {
     if (verifyState !== "verified") { toast.error("Verify your account first"); return; }
     if (bankPin.length !== 4) { toast.error("Enter your 4-digit PIN to confirm"); return; }
@@ -182,21 +225,50 @@ export default function SettingsClient({
   const handleSavePin = async () => {
     if (newPin.length !== 4) { toast.error("PIN must be 4 digits"); return; }
     if (newPin !== confirmPin) { toast.error("PINs do not match"); return; }
-    if (hasPin && currentPin.length !== 4) { toast.error("Enter your current PIN"); return; }
+    // Changing existing PIN requires OTP
+    if (hasPin && otpCode.length !== 6) { toast.error("Enter the 6-digit code sent to your email"); return; }
     setSavingPin(true);
     try {
       const res = await fetch("/api/supplier/settings/pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPin: hasPin ? currentPin : undefined, pin: newPin, confirmPin }),
+        body: JSON.stringify({
+          otp:        hasPin ? otpCode : undefined,
+          pin:        newPin,
+          confirmPin,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.message || "Failed to update PIN"); return; }
       toast.success(data.message);
-      setCurrentPin(""); setNewPin(""); setConfirmPin("");
+      setNewPin(""); setConfirmPin(""); setOtpCode(""); setOtpSent(false);
       router.refresh();
     } catch { toast.error("Network error"); }
     finally { setSavingPin(false); }
+  };
+
+  const handleSendOtp = async () => {
+    setSendingOtp(true);
+    try {
+      const res = await fetch("/api/supplier/settings/pin/request-otp", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.message || "Failed to send code");
+        return;
+      }
+      setOtpSent(true);
+      setMaskedEmail(data.maskedEmail ?? "your email");
+      toast.success("Code sent", { description: `Check ${data.maskedEmail}` });
+      // Start 60-second cooldown
+      setOtpCooldown(60);
+      const interval = setInterval(() => {
+        setOtpCooldown((s) => {
+          if (s <= 1) { clearInterval(interval); return 0; }
+          return s - 1;
+        });
+      }, 1000);
+    } catch { toast.error("Network error"); }
+    finally { setSendingOtp(false); }
   };
 
   const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
@@ -282,6 +354,76 @@ export default function SettingsClient({
               className="w-full py-3 rounded-xl bg-brand-orange hover:bg-brand-orange/90 text-white font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {savingProfile ? <><Loader2 className="w-4 h-4 animate-spin" />Saving...</> : "Save Profile"}
+            </button>
+          </div>
+        )}
+
+        {/* ── Pickup Address Card (shown in profile tab) ── */}
+        {activeTab === "profile" && (
+          <div className="bg-card rounded-2xl border border-border p-6 space-y-5">
+            <div>
+              <h2 className="font-bold text-foreground">Pickup Address</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Where Sendbox couriers will collect your orders. Required for Platform Logistics products.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted uppercase tracking-wide">Street Address</label>
+              <input
+                value={pickupForm.pickupAddress}
+                onChange={(e) => setPickupForm((p) => ({ ...p, pickupAddress: e.target.value }))}
+                placeholder="e.g. 12 Onitsha Main Market Road"
+                className="w-full px-4 py-3 rounded-xl border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted uppercase tracking-wide">City</label>
+                <input
+                  value={pickupForm.pickupCity}
+                  onChange={(e) => setPickupForm((p) => ({ ...p, pickupCity: e.target.value }))}
+                  placeholder="e.g. Onitsha"
+                  className="w-full px-4 py-3 rounded-xl border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted uppercase tracking-wide">State</label>
+                <input
+                  value={pickupForm.pickupState}
+                  onChange={(e) => setPickupForm((p) => ({ ...p, pickupState: e.target.value }))}
+                  placeholder="e.g. Anambra"
+                  className="w-full px-4 py-3 rounded-xl border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted uppercase tracking-wide">Postal Code</label>
+                <input
+                  value={pickupForm.pickupPostCode}
+                  onChange={(e) => setPickupForm((p) => ({ ...p, pickupPostCode: e.target.value }))}
+                  placeholder="e.g. 434101"
+                  className="w-full px-4 py-3 rounded-xl border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted uppercase tracking-wide">Pickup Phone</label>
+                <input
+                  type="tel"
+                  value={pickupForm.pickupPhone}
+                  onChange={(e) => setPickupForm((p) => ({ ...p, pickupPhone: e.target.value }))}
+                  placeholder="e.g. 08012345678"
+                  className="w-full px-4 py-3 rounded-xl border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleSavePickup}
+              disabled={savingPickup}
+              className="w-full py-3 rounded-xl bg-brand-orange hover:bg-brand-orange/90 text-white font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {savingPickup ? <><Loader2 className="w-4 h-4 animate-spin" />Saving...</> : "Save Pickup Address"}
             </button>
           </div>
         )}
@@ -394,42 +536,96 @@ export default function SettingsClient({
             </div>
 
             {!hasPin && (
-              <div className="p-4 rounded-xl bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+              <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-700 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-900 dark:text-amber-200">
                   You haven't set a PIN yet. Set one to enable withdrawals.
                 </p>
               </div>
             )}
 
+            {/* OTP step — only shown when changing an existing PIN */}
             {hasPin && (
-              <PinField value={currentPin} onChange={setCurrentPin} label="Current PIN" />
+              <div className="space-y-3">
+                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50">
+                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                    Email verification required
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    {otpSent
+                      ? `A 6-digit code was sent to ${maskedEmail}. Enter it below.`
+                      : "We'll send a one-time code to your registered email to verify it's you."}
+                  </p>
+                </div>
+
+                {!otpSent ? (
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={sendingOtp}
+                    className="w-full py-3 rounded-xl border-2 border-brand-orange text-brand-orange font-semibold text-sm hover:bg-brand-orange/5 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {sendingOtp ? <><Loader2 className="w-4 h-4 animate-spin" />Sending…</> : "📧 Send Verification Code"}
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted uppercase tracking-wide">
+                      6-Digit Verification Code
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        className="flex-1 px-4 py-3 rounded-xl border border-input bg-background text-foreground text-center text-xl tracking-[0.4em] font-bold focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={sendingOtp || otpCooldown > 0}
+                        className="px-4 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-40 whitespace-nowrap"
+                      >
+                        {otpCooldown > 0 ? `Resend (${otpCooldown}s)` : "Resend"}
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Code expires in 10 minutes.</p>
+                  </div>
+                )}
+              </div>
             )}
 
-            <PinField value={newPin} onChange={setNewPin} label="New PIN" />
-            <PinField value={confirmPin} onChange={setConfirmPin} label="Confirm New PIN" />
+            {/* New PIN fields — shown always (for set) or after OTP sent (for change) */}
+            {(!hasPin || otpSent) && (
+              <>
+                <PinField value={newPin} onChange={setNewPin} label="New PIN" />
+                <PinField value={confirmPin} onChange={setConfirmPin} label="Confirm New PIN" />
 
-            {newPin.length === 4 && confirmPin.length === 4 && newPin !== confirmPin && (
-              <p className="text-sm text-red-500 flex items-center gap-1">
-                <AlertCircle className="w-4 h-4" />PINs do not match
-              </p>
+                {newPin.length === 4 && confirmPin.length === 4 && newPin !== confirmPin && (
+                  <p className="text-sm text-red-500 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />PINs do not match
+                  </p>
+                )}
+
+                <button
+                  onClick={handleSavePin}
+                  disabled={
+                    savingPin ||
+                    newPin.length !== 4 ||
+                    confirmPin.length !== 4 ||
+                    newPin !== confirmPin ||
+                    (hasPin && otpCode.length !== 6)
+                  }
+                  className="w-full py-3 rounded-xl bg-brand-orange hover:bg-brand-orange/90 text-white font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                >
+                  {savingPin ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" />Saving…</>
+                  ) : hasPin ? "Change PIN" : "Set PIN"}
+                </button>
+              </>
             )}
-
-            <button
-              onClick={handleSavePin}
-              disabled={
-                savingPin ||
-                newPin.length !== 4 ||
-                confirmPin.length !== 4 ||
-                newPin !== confirmPin ||
-                (hasPin && currentPin.length !== 4)
-              }
-              className="w-full py-3 rounded-xl bg-brand-orange hover:bg-brand-orange/90 text-white font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-            >
-              {savingPin ? (
-                <><Loader2 className="w-4 h-4 animate-spin" />Saving...</>
-              ) : hasPin ? "Change PIN" : "Set PIN"}
-            </button>
 
             <p className="text-xs text-center text-muted-foreground">
               Never share your PIN with anyone. Vendo staff will never ask for it.
